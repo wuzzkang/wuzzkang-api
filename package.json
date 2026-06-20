@@ -1,0 +1,35 @@
+{
+  "name": "wuzzkang-api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --experimental-fetch server.js",
+    "dev": "nodemon --exec 'node --experimental-fetch' server.js",
+    "test:api": "node --experimental-fetch test-api.js",
+    "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit",
+    "test": "npm run test:unit"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.2",
+    "bullmq": "^5.79.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "ioredis": "^5.11.1",
+    "morgan": "^1.11.0",
+    "node-fetch": "^3.3.2",
+    "octokit": "^5.0.5",
+    "openai": "^6.44.0",
+    "undici": "^8.5.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2",
+    "nodemon": "^3.1.14"
+  }
+}
