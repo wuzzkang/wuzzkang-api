@@ -14,7 +14,7 @@
 - [x] API Routes registered (`/api/payments/webhook`).
 
 ## Phase 5b: Payment Testing (Current Focus)
-- [ ] Implement E2E Integration Test (`src/tests/payment.integration.test.js`).
+- [x] Implement E2E Integration Test (`src/tests/payment.integration.test.js`).
     - Setup: Create dummy profile in DB.
     - Test: Hit webhook with valid UUID and signature.
     - Verify: Check wallet balance increment.
