@@ -3,7 +3,7 @@
  *
  * PURPOSE OF THIS PATTERN:
  * We use the Adapter Pattern to decouple our business logic from any specific
- * payment provider (Midtrans, Xendit, Stripe, etc.).
+ * payment provider (Winpay, Midtrans, Xendit, etc.).
  *
  * This means:
  * - Our controllers/services call a CONSISTENT interface, never a specific vendor SDK.
@@ -12,20 +12,31 @@
  *
  * HOW TO ADD A NEW PROVIDER:
  * 1. Create a new class that extends `PaymentGatewayInterface`.
- * 2. Implement all abstract methods.
- * 3. Update `PaymentFactory.getProvider()` to return your new instance.
+ * 2. Accept a `config` object in the constructor.
+ * 3. Implement all abstract methods.
+ * 4. Register it in `PaymentFactory.PROVIDERS` and add its env config loader.
  */
 
 /**
  * Abstract base class for payment gateway adapters.
  * All real and mock payment providers MUST extend this class and implement
  * all methods defined here.
+ *
+ * @abstract
  */
 export class PaymentGatewayInterface {
     /**
+     * @param {Object} config - Provider-specific configuration (API keys, URLs, etc.)
+     *                          Injected by `PaymentFactory` from `process.env`.
+     */
+    constructor(config = {}) {
+        this.config = config;
+    }
+
+    /**
      * Creates a new payment transaction and returns a checkout URL.
      *
-     * @param {number} amount - The transaction amount in the smallest currency unit (e.g., cents, rupiah).
+     * @param {number} amount - The transaction amount (e.g., in IDR / cents).
      * @param {string} userId - The ID of the user initiating the payment.
      * @param {string} orderId - A unique order identifier for this transaction.
      * @returns {Promise<{ checkoutUrl: string, token: string }>} Checkout URL and transaction token.
@@ -36,13 +47,15 @@ export class PaymentGatewayInterface {
     }
 
     /**
-     * Verifies the authenticity of an incoming webhook payload using a signature.
-     * This is a critical security step to ensure the webhook originates from
-     * the legitimate payment provider.
+     * Verifies the authenticity of an incoming webhook payload using a provider-specific
+     * signature strategy.
      *
-     * @param {Object} payload - The raw webhook payload object.
+     * - `DummyProvider`:  Always returns `true` (no-op for local testing).
+     * - `WinpayProvider`: Verifies RSA-SHA256 signature using `WINPAY_PUBLIC_KEY`.
+     *
+     * @param {Object} payload   - The raw webhook payload object from the request body.
      * @param {string} signature - The signature from the request header (e.g., `x-signature`).
-     * @returns {boolean} True if the signature is valid, false otherwise.
+     * @returns {boolean} `true` if the signature is valid, `false` otherwise.
      * @throws {Error} Method not implemented.
      */
     verifyWebhook(payload, signature) {
@@ -50,7 +63,24 @@ export class PaymentGatewayInterface {
     }
 
     /**
-     * Processes a verified webhook payload and fulfills the business action
+     * Verifies an inbound callback from the provider after a payment event.
+     * Distinct from `verifyWebhook` in that this is for provider-initiated async
+     * callbacks (e.g., payment status updates from Winpay).
+     *
+     * - `DummyProvider`:  Always returns `true`.
+     * - `WinpayProvider`: Verifies RSA-SHA256 signature using `WINPAY_PUBLIC_KEY`.
+     *
+     * @param {Object} payload   - The callback payload object.
+     * @param {string} signature - The provider's signature (from request header or body field).
+     * @returns {boolean} `true` if the callback is authentic, `false` otherwise.
+     * @throws {Error} Method not implemented.
+     */
+    verifyCallback(payload, signature) {
+        throw new Error(`Method 'verifyCallback' not implemented by ${this.constructor.name}.`);
+    }
+
+    /**
+     * Processes a verified webhook payload and fulfills the associated business action
      * (e.g., crediting a user's wallet on successful payment).
      *
      * @param {Object} payload - The verified webhook payload object.
@@ -67,11 +97,12 @@ export class PaymentGatewayInterface {
      *
      * WHY THIS METHOD:
      * Different payment gateways expect DIFFERENT response formats for webhook ACKs.
+     * - Winpay expects `{ status: 'OK' }`.
      * - Midtrans expects `{ status: '200' }`.
      * - Xendit expects an empty 200, or `{ success: true }`.
-     * - Our DummyProvider can return anything for testing.
+     * - DummyProvider can return anything for testing.
      * By delegating this to the provider, the controller stays 100% generic
-     * and doesn't need any provider-specific `if/else` logic.
+     * and requires no provider-specific `if/else` logic.
      *
      * @param {Object} payload - The processed webhook payload.
      * @returns {Object} The JSON object to send back to the payment gateway.

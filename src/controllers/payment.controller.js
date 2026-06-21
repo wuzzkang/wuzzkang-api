@@ -26,7 +26,7 @@ import { PaymentFactory } from '../services/payments/factory.js';
 export async function handleWebhook(req, res) {
     // Step 1: Obtain the currently configured provider via the Factory.
     // We never import DummyPaymentProvider (or any real provider) directly here.
-    const provider = PaymentFactory.getProvider();
+    const provider = await PaymentFactory.getProvider();
 
     const payload = req.body;
 

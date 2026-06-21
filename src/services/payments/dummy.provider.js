@@ -1,15 +1,16 @@
 /**
- * @fileoverview Dummy Payment Provider (for Local Testing & CI)
+ * @fileoverview Dummy Payment Provider (for Local Development & CI)
  *
  * WHY THIS EXISTS:
  * Per the Adapter Pattern, we ALWAYS implement a DummyProvider before connecting
- * to a real payment SDK (Midtrans, Xendit). This allows:
+ * to a real payment SDK. This allows:
  * - Full local testing without external dependencies.
  * - CI pipelines to run without needing real API credentials.
  * - Safe load testing without triggering real financial transactions.
  *
- * When ready for production, create a `MidtransProvider` or `XenditProvider`
- * that extend `PaymentGatewayInterface` and swap it in `PaymentFactory`.
+ * When ready for production, create a `WinpayProvider` (or other) that extends
+ * `PaymentGatewayInterface`, registers its env config in `PaymentFactory`, and
+ * gets swapped in automatically when `NODE_ENV === 'production'`.
  */
 
 import { PaymentGatewayInterface } from './interface.js';
@@ -23,57 +24,77 @@ import { walletService } from '../wallet.service.js';
  */
 export class DummyPaymentProvider extends PaymentGatewayInterface {
     /**
+     * @param {Object} [config={}] - Optional config injected by PaymentFactory.
+     *                               Not used by the dummy provider itself, but
+     *                               accepted to fulfil the standard constructor contract.
+     */
+    constructor(config = {}) {
+        super(config);
+    }
+
+    /**
      * Simulates creating a payment transaction.
      *
-     * @param {number} amount - The amount in the smallest currency unit.
-     * @param {string} userId - The ID of the user.
+     * @param {number} amount  - The amount (e.g., in IDR).
+     * @param {string} userId  - The ID of the user.
      * @param {string} orderId - A unique order identifier.
-     * @returns {Promise<{ checkoutUrl: string, token: string }>} Simulated checkout details.
+     * @returns {Promise<{ checkoutUrl: string, token: string }>}
      */
     async createTransaction(amount, userId, orderId) {
         const mockToken = `dummy-token-${orderId}-${Date.now()}`;
         const checkoutUrl = `/mock-checkout?token=${mockToken}`;
 
-        console.log(
-            `[DummyPaymentProvider] Simulating transaction creation:`,
-            { orderId, userId, amount, checkoutUrl }
-        );
+        console.log('[DummyPaymentProvider] Simulating transaction creation:', {
+            orderId, userId, amount, checkoutUrl,
+        });
 
-        return {
-            checkoutUrl,
-            token: mockToken,
-        };
+        return { checkoutUrl, token: mockToken };
     }
 
     /**
      * Simulates webhook signature verification.
-     * In a real provider (e.g., Midtrans), this would compute an HMAC-SHA512
-     * hash and compare it against the provider's signature header.
+     * Always returns `true` — no crypto operations performed.
      *
-     * @param {Object} payload - The webhook payload.
-     * @param {string} signature - The signature from the request header.
-     * @returns {boolean} Always returns true in dummy mode.
+     * @param {Object} payload   - Webhook payload.
+     * @param {string} signature - Signature header value.
+     * @returns {boolean} Always `true`.
      */
     verifyWebhook(payload, signature) {
-        console.log(`[DummyPaymentProvider] Simulating webhook verification (always passes).`);
+        console.log('[DummyPaymentProvider] Simulating webhook verification (always passes).');
+        return true;
+    }
+
+    /**
+     * Simulates provider callback signature verification.
+     * Always returns `true` — no crypto operations performed.
+     *
+     * Real implementation (WinpayProvider) will verify RSA-SHA256
+     * using `WINPAY_PUBLIC_KEY` from this.config.
+     *
+     * @param {Object} payload   - Callback payload.
+     * @param {string} signature - Provider's signature.
+     * @returns {boolean} Always `true`.
+     */
+    verifyCallback(payload, signature) {
+        console.log('[DummyPaymentProvider] Simulating callback verification (always passes).');
         return true;
     }
 
     /**
      * Processes a verified webhook by crediting the user's wallet.
-     * Expects `payload.userId` and `payload.amount`.
      *
-     * @param {Object} payload - The verified webhook payload.
-     * @param {string} payload.userId - The ID of the user to credit.
-     * @param {number} payload.amount - The amount to credit.
-     * @param {string} payload.orderId - The order ID (for logging).
+     * @param {Object} payload          - Verified webhook payload.
+     * @param {string} payload.userId   - User to credit.
+     * @param {number} payload.amount   - Amount to credit.
+     * @param {string} payload.orderId  - Order ID (for audit log).
      * @returns {Promise<void>}
      */
     async processWebhook(payload) {
         const { userId, amount, orderId } = payload;
 
         console.log(
-            `[DummyPaymentProvider] Processing successful payment for order ${orderId}. Crediting ${amount} to user ${userId}.`
+            `[DummyPaymentProvider] Processing successful payment for order ${orderId}.` +
+            ` Crediting ${amount} to user ${userId}.`
         );
 
         await walletService.addTransaction(
@@ -87,11 +108,10 @@ export class DummyPaymentProvider extends PaymentGatewayInterface {
     }
 
     /**
-     * Returns the success response payload for the Dummy Provider.
-     * Simulates a simple 200 OK acknowledgement back to the payment gateway.
+     * Returns the success ACK response for the Dummy Provider.
      *
      * @param {Object} payload - The processed webhook payload.
-     * @returns {{ status: string, message: string }} Standard success ACK.
+     * @returns {{ status: string, message: string }}
      */
     getSuccessResponse(payload) {
         return {
