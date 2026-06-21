@@ -1,27 +1,26 @@
 # WuzzKang API - Project Roadmap
 
-## Phase 1-4: Foundation & Orchestration (Completed)
-- [x] Base project structure (Express + ESM).
-- [x] WalletService (Atomic transactions).
-- [x] ProjectService (Orchestration logic).
-- [x] Unit testing with Jest.
+## Phase 6: Winpay Production-Ready Integration (In Progress)
 
-## Phase 5: Payment Gateway Integration (Completed)
-- [x] Adapter Pattern implemented (`interface.js`).
-- [x] Dummy Payment Provider (`dummy.provider.js`).
-- [x] Payment Factory implementation (`factory.js`).
-- [x] Webhook Controller (`payment.controller.js`) & Error Handling.
-- [x] API Routes registered (`/api/payments/webhook`).
+### Task 6.1: Setup & Configuration
+- [ ] Define RSA keys in `.env` (`OUR_PRIVATE_KEY`, `WINPAY_PUBLIC_KEY`).
+- [ ] Add `WINPAY_PARTNER_ID` to `.env`.
+- [ ] Update `PaymentGatewayInterface` to include `verifyCallback(payload, signature)`.
 
-## Phase 5b: Payment Testing (Current Focus)
-- [x] Implement E2E Integration Test (`src/tests/payment.integration.test.js`).
-    - Setup: Create dummy profile in DB.
-    - Test: Hit webhook with valid UUID and signature.
-    - Verify: Check wallet balance increment.
-    - Cleanup: Delete dummy profile.
+### Task 6.2: WinpayProvider Core (Signing)
+- [ ] Implement `src/services/payments/winpay.provider.js`.
+- [ ] Implement `generateSignature(payload)` using RSA-SHA256.
+- [ ] Create unit tests for signature generation to match Winpay docs.
 
-## Phase 6: Real Provider & Frontend (Next)
-- [ ] Implement `MidtransProvider` (or preferred provider) extending `PaymentGatewayInterface`.
-- [ ] Update `PaymentFactory` to support environment-based provider switching.
-- [ ] Frontend Integration: Connect checkout flow to API.
-- [ ] Security Hardening: Implement IP Whitelisting for webhooks.
+### Task 6.3: WinpayProvider Implementation (API)
+- [ ] Implement `createTransaction()` (VA/QRIS) in `WinpayProvider`.
+- [ ] Implement `verifyCallback()` logic using `WINPAY_PUBLIC_KEY`.
+
+### Task 6.4: PaymentFactory Orchestration
+- [ ] Refactor `factory.js` to check `NODE_ENV`.
+- [ ] Return `WinpayProvider` if `NODE_ENV === 'production'`.
+- [ ] Return `DummyPaymentProvider` otherwise.
+
+### Task 6.5: Security & Verification
+- [ ] Add IP Whitelisting middleware for `/api/payments/webhook`.
+- [ ] Full Integration Test (Mocking Winpay sandbox behavior).

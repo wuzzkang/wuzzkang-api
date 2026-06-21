@@ -24,25 +24,15 @@ graph TD
 ```
 
 ## 2. Core Architectural Patterns
-
-These patterns are non-negotiable standards for system consistency:
-
-* **A. Billing Engine (Atomic Transactions):**
-* All financial operations must be atomic.
-* Every deduction/credit must be wrapped in a database transaction.
-* If `ProjectService` fails, the `WalletService` MUST trigger a rollback (refund).
-
-
-* **B. Migration Workflow (Infrastructure as Code):**
-* Database schema changes are managed via `supabase migration new`.
-* Manual SQL edits via UI are strictly prohibited.
-* `supabase db push` is the only mechanism for deployment.
-
-
-* **C. Adapter Pattern (Extensibility):**
-* Payment providers must implement a common interface.
-* Always implement `DummyProvider` first for local testing/CI before connecting to production providers (Midtrans/Xendit).
-
+* **C. Adapter Pattern (Extensibility & Environment Switching):**
+  - Providers implement `PaymentGatewayInterface`.
+  - `PaymentFactory` acts as the Service Locator.
+  - Logic: 
+    - `DummyProvider`: Returns hardcoded success; used for local development and integration tests.
+    - `WinpayProvider`: Uses RSA-SHA256 signing; used in production.
+  - Signing Strategy: 
+    - Winpay requests require RSA signing (Private Key).
+    - Winpay callbacks require RSA verification (Public Key).
 
 
 ## 3. Tech Stack

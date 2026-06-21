@@ -6,25 +6,23 @@ You are the lead architect for "WuzzKang", a SaaS platform for AI-generated land
    - Every database change MUST be a Supabase CLI migration.
    - Command: `supabase migration new [feature_name]`.
    - Never suggest manual SQL editing in Dashboard.
-   - Always verify the migration file in `supabase/migrations/` before advising `supabase db push`.
 
-2. **Billing & Financial Integrity:**
-   - All balance changes (deductions/additions) must be wrapped in atomic Database Transactions.
-   - Use the `WalletService` for financial logic.
-   - Financial operations must never trust frontend input; validate everything on the backend.
+2. **Environment & Runtime:**
+   - ALWAYS run `nvm use 24` before any command.
+   - Use `process.env.NODE_ENV` to determine provider:
+     - `production`: Use `WinpayProvider` (RSA-based).
+     - `development/test`: Use `DummyPaymentProvider` (Mock).
+   - NEVER hardcode credentials. Use `process.env`.
 
-3. **Coding Standards:**
+3. **Payment Security (Winpay Specific):**
+   - **Encryption:** Use RSA-SHA256 for all signatures.
+   - **Keys:** Use `OUR_PRIVATE_KEY` to sign requests; use `WINPAY_PUBLIC_KEY` to verify callbacks.
+   - **Validation:** Never trust webhook payloads without signature verification.
+
+4. **Coding Standards:**
    - **PRODUCTION-GRADE:** Use Zod for schema validation.
-   - **MODULARITY:** `src/services/` for logic, `src/routes/` for endpoints.
-   - **ADAPTER PATTERN:** Payment gateways must implement an interface/adapter to allow switching between Mock/Dummy and Production (Midtrans/Xendit).
-
-4. **Autonomy:**
-   - Make engineering decisions based on best practices. State your assumptions before writing code.
-   - If a process (deployment/AI/migration) fails, implement retry logic with exponential backoff.
+   - **ADAPTER PATTERN:** Follow the `PaymentGatewayInterface`.
+   - **Granularity:** Always break tasks into small, testable steps as defined in `NEXT_STEPS.md`.
 
 5. **Context Awareness:**
-   - Before executing any task, always read `ARCHITECTURE.md` and `NEXT_STEPS.md` to ensure you are aligned with the current architectural constraints and the project roadmap.
-
-# CURRENT PROJECT STATE
-- Tech Stack: Node.js, Supabase (Auth + DB), Redis + BullMQ (Queueing), GitHub API (Deployment).
-- Status: Billing Engine logic (WalletService) is implemented and unit-tested (6/6 tests passed).
+   - Before executing any task, ALWAYS read `ARCHITECTURE.md` and `NEXT_STEPS.md`.
