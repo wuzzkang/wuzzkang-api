@@ -1,19 +1,27 @@
-# Roadmap & Current State
-## Status: In Progress
+# WuzzKang API - Project Roadmap
 
-## Completed Tasks
-- [x] Database Schema Design (CLI Migrations)
-- [x] WalletService (Atomic Balance Logic)
-- [x] Unit Testing (WalletService 6/6 passed)
+## Phase 1-4: Foundation & Orchestration (Completed)
+- [x] Base project structure (Express + ESM).
+- [x] WalletService (Atomic transactions).
+- [x] ProjectService (Orchestration logic).
+- [x] Unit testing with Jest.
 
-## Immediate Next Tasks (Phase 4 & 5)
-1. [x] **Orchestration:** Integrate `WalletService.deductBalance` into `ProjectService.generateLandingPage` with full Rollback/Refund logic.
-2. [x] **Orchestration Testing:** Create integration test for `generateLandingPage` ensuring:
-     - If generate success -> balance deducted.
-     - If generate fails -> balance refunded (atomic rollback).
-3. [ ] **Payment Adapter:** Define `PaymentGatewayInterface` and implement `DummyPaymentProvider` for testing.
-4. [ ] **Payment Controller:** Create `POST /api/payments/dummy-webhook` for local testing simulation.
+## Phase 5: Payment Gateway Integration (Completed)
+- [x] Adapter Pattern implemented (`interface.js`).
+- [x] Dummy Payment Provider (`dummy.provider.js`).
+- [x] Payment Factory implementation (`factory.js`).
+- [x] Webhook Controller (`payment.controller.js`) & Error Handling.
+- [x] API Routes registered (`/api/payments/webhook`).
 
-## Knowledge Transfer Note
-- AI agents reading this: Please review `src/services/wallet.service.js` and `ARCHITECTURE.md` before modifying `ProjectService`. 
-- CRITICAL: Ensure `ProjectService` uses a `try-catch` block for orchestrating the billing flow. Rollback MUST be handled if deployment/generation fails.
+## Phase 5b: Payment Testing (Current Focus)
+- [ ] Implement E2E Integration Test (`src/tests/payment.integration.test.js`).
+    - Setup: Create dummy profile in DB.
+    - Test: Hit webhook with valid UUID and signature.
+    - Verify: Check wallet balance increment.
+    - Cleanup: Delete dummy profile.
+
+## Phase 6: Real Provider & Frontend (Next)
+- [ ] Implement `MidtransProvider` (or preferred provider) extending `PaymentGatewayInterface`.
+- [ ] Update `PaymentFactory` to support environment-based provider switching.
+- [ ] Frontend Integration: Connect checkout flow to API.
+- [ ] Security Hardening: Implement IP Whitelisting for webhooks.

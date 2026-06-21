@@ -113,3 +113,11 @@ export async function generateLandingPage(prompt) {
 
   return validation.data;
 }
+
+/**
+ * Named service object export for consistency with other services (e.g., walletService, supabaseService).
+ * Allows `import { aiService } from './ai.service.js'` and `aiService.generateLandingPage(...)`.
+ */
+export const aiService = {
+  generateLandingPage,
+};

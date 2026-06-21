@@ -6,6 +6,7 @@ import { errorMiddleware } from './src/middleware/errorMiddleware.js';
 import generatorRoute from './src/routes/generator.route.js';
 import deployRoute from './src/routes/deploy.route.js';
 import projectRoute from './src/routes/project.route.js';
+import paymentRoute from './src/routes/payment.route.js';
 import { startDeployWorker } from './src/queues/deployWorker.js';
 
 const app = express();
@@ -27,12 +28,19 @@ app.get('/health', (req, res) => {
 app.use('/api', generatorRoute);
 app.use('/api', deployRoute);
 app.use('/api', projectRoute);
+app.use('/api', paymentRoute);
 
 // Error handling
 app.use(errorMiddleware);
 
 const PORT = config.PORT || 3000;
 
-app.listen(PORT, () => {
-    console.log(`🚀 WuzzKang API running on port ${PORT} in ${config.NODE_ENV} mode`);
-});
+// Export app for testing
+export { app };
+
+// Only listen if run directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+    app.listen(PORT, () => {
+        console.log(`🚀 WuzzKang API running on port ${PORT} in ${config.NODE_ENV} mode`);
+    });
+}
