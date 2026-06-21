@@ -141,6 +141,11 @@ describe('Payment Webhook — E2E Integration Test', () => {
             message: 'Webhook received',
         });
 
+        // ── Step 4: Assert balance updated in DB ──────────────────────────
+        const finalBalance = await walletService.getBalance(dummyUserId);
+        console.log(`[Test] Final balance   : Rp ${finalBalance.toLocaleString('id-ID')}`);
+        console.log(`[Test] Delta           : Rp ${(finalBalance - initialBalance).toLocaleString('id-ID')} (expected Rp ${testAmount.toLocaleString('id-ID')})`);
+
         expect(Number(finalBalance)).toBe(Number(initialBalance) + testAmount);
 
         // ── Step 5: Duplicate Hit (Idempotency Check) ──────────────────

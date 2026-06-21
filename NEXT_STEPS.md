@@ -1,7 +1,7 @@
 # WuzzKang API - Project Roadmap
 
 ## Phase 5c: Infrastructure Hardening
-- [ ] Task 5.5: Implement Idempotency (Database Constraint & Check-then-Act Logic).
+- [x] Task 5.5: Implement Idempotency (Database Constraint & Check-then-Act Logic).
 
 ## Phase 6: Winpay Production-Ready Integration
 - [ ] Task 6.1: Setup & Configuration (RSA keys and Env vars).
