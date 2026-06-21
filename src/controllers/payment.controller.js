@@ -10,6 +10,7 @@
  */
 
 import { PaymentFactory } from '../services/payments/factory.js';
+import { supabaseService } from '../services/supabase.service.js';
 
 /**
  * Handles an inbound payment gateway webhook.
@@ -17,8 +18,9 @@ import { PaymentFactory } from '../services/payments/factory.js';
  * Flow:
  * 1. Get the active payment provider from the factory.
  * 2. Verify the webhook signature for authenticity.
- * 3. Process the webhook (e.g., credit user wallet).
- * 4. Return the provider-specific success response.
+ * 3. Check for idempotency (prevent duplicate processing).
+ * 4. Process the webhook (e.g., credit user wallet).
+ * 5. Return the provider-specific success response.
  *
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -44,11 +46,25 @@ export async function handleWebhook(req, res) {
         return res.status(400).send('Invalid Signature');
     }
 
-    // Step 3: Process the webhook (e.g., topup user wallet).
+    // Step 3: Check for idempotency (prevent duplicate processing).
+    // We check if this orderId has already been recorded in our transactions table.
+    const { orderId } = payload;
+    try {
+        const isDuplicate = await supabaseService.checkTransactionExists(orderId);
+        if (isDuplicate) {
+            console.log(`[PaymentController] Ignored (Duplicate): orderId ${orderId} already processed.`);
+            return res.status(200).json(provider.getSuccessResponse(payload));
+        }
+    } catch (error) {
+        console.error(`[PaymentController] Idempotency check failed: ${error.message}`);
+        // We continue anyway; the DB unique constraint will be our final safety net.
+    }
+
+    // Step 4: Process the webhook (e.g., topup user wallet).
     try {
         await provider.processWebhook(payload);
 
-        // Step 4: Return the provider-specific success response.
+        // Step 5: Return the provider-specific success response.
         // WHY `getSuccessResponse()`:
         // Each payment gateway expects a DIFFERENT acknowledgement format.
         // By asking the provider to define its own success response, this

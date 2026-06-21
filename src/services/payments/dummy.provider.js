@@ -101,7 +101,8 @@ export class DummyPaymentProvider extends PaymentGatewayInterface {
             userId,
             amount,
             'topup',
-            `Top-up via Dummy Provider. Order ID: ${orderId}`
+            `Top-up via Dummy Provider. Order ID: ${orderId}`,
+            orderId
         );
 
         console.log(`[DummyPaymentProvider] Wallet credited successfully for user ${userId}.`);

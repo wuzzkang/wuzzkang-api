@@ -141,11 +141,37 @@ describe('Payment Webhook — E2E Integration Test', () => {
             message: 'Webhook received',
         });
 
-        // ── Step 4: Assert balance updated in DB ──────────────────────────
-        const finalBalance = await walletService.getBalance(dummyUserId);
-        console.log(`[Test] Final balance   : Rp ${finalBalance.toLocaleString('id-ID')}`);
-        console.log(`[Test] Delta           : Rp ${(finalBalance - initialBalance).toLocaleString('id-ID')} (expected Rp ${testAmount.toLocaleString('id-ID')})`);
-
         expect(Number(finalBalance)).toBe(Number(initialBalance) + testAmount);
+
+        // ── Step 5: Duplicate Hit (Idempotency Check) ──────────────────
+        console.log('\n[Test] Sending duplicate webhook hit...');
+        const dupResponse = await fetch(API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-signature': 'dummy-sig-always-passes',
+            },
+            body: JSON.stringify({
+                userId: dummyUserId,
+                amount: testAmount,
+                orderId: testOrderId,
+            }),
+        });
+
+        const dupResult = await dupResponse.json();
+        console.log('[Test] Duplicate hit response:', JSON.stringify(dupResult));
+
+        // Assert: Still 200 OK
+        expect(dupResponse.status).toBe(200);
+        expect(dupResult).toEqual({
+            status: 'success',
+            message: 'Webhook received',
+        });
+
+        // Assert: Balance should NOT have increased again
+        const balanceAfterDup = await walletService.getBalance(dummyUserId);
+        console.log(`[Test] Balance after duplicate: Rp ${balanceAfterDup.toLocaleString('id-ID')}`);
+        expect(Number(balanceAfterDup)).toBe(Number(finalBalance));
+        console.log('[Test] ✅ Idempotency verified: Balance did not increase on duplicate hit.');
     });
 });

@@ -58,8 +58,9 @@ export const walletService = {
      * @param {number} amount - The amount to add.
      * @param {string} type - The transaction type.
      * @param {string} description - Transaction description.
+     * @param {string} orderId - Unique order identifier for idempotency.
      */
-    async addTransaction(userId, amount, type, description = '') {
+    async addTransaction(userId, amount, type, description = '', orderId = null) {
         // For top-ups, we can just update the balance and insert a transaction.
         // In a real SaaS, this would be triggered by a payment gateway webhook.
         const { data: profile, error: profileError } = await supabase.rpc('get_or_create_profile', {
@@ -82,6 +83,7 @@ export const walletService = {
                 amount: amount,
                 type: type,
                 description: description,
+                order_id: orderId,
             },
         ]);
 

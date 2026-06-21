@@ -92,4 +92,23 @@ export const supabaseService = {
         if (error) throw error;
         return data;
     },
+
+    /**
+     * Checks if a transaction with the given orderId already exists.
+     * 
+     * @param {string} orderId - The unique order identifier.
+     * @returns {Promise<boolean>} True if it exists, false otherwise.
+     */
+    async checkTransactionExists(orderId) {
+        if (!orderId) return false;
+
+        const { data, error } = await supabase
+            .from('transactions')
+            .select('id')
+            .eq('order_id', orderId)
+            .maybeSingle();
+
+        if (error) throw error;
+        return !!data;
+    },
 };
