@@ -67,8 +67,23 @@ export const projectService = {
             };
         } catch (error) {
             console.error(`[ProjectService] Error during project creation: ${error.message}`);
-            // Note: In a real system, we might want to refund the balance if AI generation fails.
-            // For now, we log the error.
+
+            // Step 3 (Safety Net/Rollback): Refund balance if execution fails
+            try {
+                console.log(`[ProjectService] Attempting to refund ${GENERATION_COST} credits to user ${userId}...`);
+                await walletService.addTransaction(
+                    userId,
+                    GENERATION_COST,
+                    'refund',
+                    `Refund for failed project creation: ${projectName}`
+                );
+                console.log(`[ProjectService] Refund successful.`);
+            } catch (refundError) {
+                console.error(`[ProjectService] CRITICAL: Refund failed for user ${userId}: ${refundError.message}`);
+                // We don't throw refundError here to ensure the original error is re-thrown
+            }
+
+            // Re-throw original error
             throw error;
         }
     },
