@@ -49,8 +49,9 @@ export class WinpayProvider extends PaymentGatewayInterface {
      * @returns {string} Base64 encoded RSA-SHA256 signature.
      */
     generateSignature(payload, method, url, timestamp) {
-        // 1. Minify request body
-        const minifiedBody = JSON.stringify(payload);
+        // 1. Minify request body with sorted keys (Canonical JSON)
+        const sortedPayload = this._sortObject(payload);
+        const minifiedBody = JSON.stringify(sortedPayload);
 
         // 2. SHA-256 Hash of the body (Hex encoded, lowercase)
         const bodyHash = crypto
@@ -83,8 +84,9 @@ export class WinpayProvider extends PaymentGatewayInterface {
     verifyCallback(payload, signature, method, url, timestamp) {
         if (!signature) return false;
 
-        // 1. Minify body
-        const minifiedBody = JSON.stringify(payload);
+        // 1. Minify body with sorted keys
+        const sortedPayload = this._sortObject(payload);
+        const minifiedBody = JSON.stringify(sortedPayload);
 
         // 2. SHA-256 Hash
         const bodyHash = crypto
@@ -105,21 +107,109 @@ export class WinpayProvider extends PaymentGatewayInterface {
 
     /**
      * Verifies a webhook signature.
-     * (Implementation depends on Winpay's specific webhook signature strategy)
      */
     verifyWebhook(payload, signature) {
-        // For now, we use the same RSA logic as callback if applicable,
-        // or a simplified version if webhooks use a different strategy.
-        // Placeholder for specific webhook logic.
         return this.verifyCallback(payload, signature, 'POST', '/api/payments/webhook', payload.timestamp || '');
     }
 
     /**
-     * Creates a transaction (VA/QRIS) via Winpay API.
-     * (To be implemented in Task 6.3)
+     * Creates a new payment transaction (VA or QRIS) via Winpay SNAP API.
+     *
+     * @param {number} amount - The transaction amount.
+     * @param {string} userId - The ID of the user.
+     * @param {string} orderId - A unique order identifier.
+     * @returns {Promise<{ checkoutUrl: string, token: string, vaNumber?: string, qrisString?: string }>}
      */
     async createTransaction(amount, userId, orderId) {
-        throw new Error('Method not yet implemented. Coming in Task 6.3.');
+        const url = '/v1.0/transfer-va/create-va';
+        const method = 'POST';
+        const payload = {
+            partnerServiceId: '',
+            customerNo: userId.substring(0, 20),
+            virtualAccountNo: '',
+            virtualAccountName: 'WuzzKang User',
+            trxId: orderId,
+            totalAmount: {
+                value: amount.toFixed(2),
+                currency: 'IDR',
+            },
+            additionalInfo: {
+                userId: userId,
+            },
+        };
+
+        console.log(`[WinpayProvider] Creating transaction for order ${orderId}...`);
+
+        try {
+            const headers = this._getHeaders(payload, method, url);
+            const response = await fetch(`${this.config.baseUrl}${url}`, {
+                method,
+                headers,
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+            }
+
+            const result = await response.json();
+            console.log(`[WinpayProvider] Response from Winpay:`, JSON.stringify(result));
+
+            if (result.responseCode !== '2000000') {
+                throw new Error(`Winpay Error: ${result.responseCode} - ${result.responseMessage}`);
+            }
+
+            return {
+                checkoutUrl: '',
+                token: result.virtualAccountData?.paymentRequestId || orderId,
+                vaNumber: result.virtualAccountData?.virtualAccountNo,
+            };
+        } catch (error) {
+            console.error(`[WinpayProvider] createTransaction failed: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Inquires the status of a transaction from Winpay (Safety Net).
+     *
+     * @param {string} orderId - The unique order identifier.
+     * @returns {Promise<Object>} The transaction status data.
+     */
+    async inquiryStatus(orderId) {
+        const url = '/v1.0/transfer-va/status';
+        const method = 'POST';
+        const payload = {
+            partnerServiceId: '',
+            customerNo: '',
+            virtualAccountNo: '',
+            trxId: orderId,
+        };
+
+        console.log(`[WinpayProvider] Inquiring status for order ${orderId}...`);
+
+        try {
+            const headers = this._getHeaders(payload, method, url);
+            const response = await fetch(`${this.config.baseUrl}${url}`, {
+                method,
+                headers,
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP Error ${response.status}: ${errorText}`);
+            }
+
+            const result = await response.json();
+            console.log(`[WinpayProvider] Inquiry result:`, JSON.stringify(result));
+
+            return result;
+        } catch (error) {
+            console.error(`[WinpayProvider] inquiryStatus failed: ${error.message}`);
+            throw error;
+        }
     }
 
     /**
@@ -138,6 +228,56 @@ export class WinpayProvider extends PaymentGatewayInterface {
             responseCode: '2000000',
             responseMessage: 'Successful',
         };
+    }
+
+    /**
+     * Generates standard SNAP headers for Winpay requests.
+     *
+     * @param {Object} payload - The request body.
+     * @param {string} method - HTTP method.
+     * @param {string} url - Endpoint URL.
+     * @returns {Object} Headers object.
+     * @private
+     */
+    _getHeaders(payload, method, url) {
+        // SNAP standard: ISO 8601 without milliseconds
+        const timestamp = new Date().toISOString().split('.')[0] + 'Z';
+        const signature = this.generateSignature(payload, method, url, timestamp);
+
+        return {
+            'Content-Type': 'application/json',
+            'X-PARTNER-ID': this.config.partnerId,
+            'X-TIMESTAMP': timestamp,
+            'X-SIGNATURE': signature,
+            'X-EXTERNAL-ID': crypto.randomUUID(),
+            'CHANNEL-ID': 'API',
+        };
+    }
+
+    /**
+     * Recursively sorts object keys for canonical JSON representation.
+     * 
+     * @param {any} obj - The object or value to sort.
+     * @returns {any} Sorted object or value.
+     * @private
+     */
+    _sortObject(obj) {
+        if (obj === null || typeof obj !== 'object') {
+            return obj;
+        }
+
+        if (Array.isArray(obj)) {
+            return obj.map((item) => this._sortObject(item));
+        }
+
+        const sortedKeys = Object.keys(obj).sort();
+        const result = {};
+
+        for (const key of sortedKeys) {
+            result[key] = this._sortObject(obj[key]);
+        }
+
+        return result;
     }
 
     /**
