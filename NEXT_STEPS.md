@@ -8,7 +8,7 @@
 
 ## Immediate Next Tasks (Phase 4 & 5)
 1. [x] **Orchestration:** Integrate `WalletService.deductBalance` into `ProjectService.generateLandingPage` with full Rollback/Refund logic.
-2. [ ] **Orchestration Testing:** Create integration test for `generateLandingPage` ensuring:
+2. [x] **Orchestration Testing:** Create integration test for `generateLandingPage` ensuring:
      - If generate success -> balance deducted.
      - If generate fails -> balance refunded (atomic rollback).
 3. [ ] **Payment Adapter:** Define `PaymentGatewayInterface` and implement `DummyPaymentProvider` for testing.
