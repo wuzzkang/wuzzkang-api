@@ -149,4 +149,21 @@ export const supabaseService = {
         if (error) throw error;
         return !!data;
     },
+
+    /**
+     * Retrieves a user profile by ID.
+     * 
+     * @param {string} userId - The ID of the user.
+     * @returns {Promise<Object>} The profile data.
+     */
+    async getProfile(userId) {
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('id, balance, email, full_name, avatar_url, updated_at')
+            .eq('id', userId)
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
 };

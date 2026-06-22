@@ -3,6 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { config } from './src/config/index.js';
 import { errorMiddleware } from './src/middleware/errorMiddleware.js';
+import { authMiddleware } from './src/middleware/auth.middleware.js';
 import generatorRoute from './src/routes/generator.route.js';
 import deployRoute from './src/routes/deploy.route.js';
 import projectRoute from './src/routes/project.route.js';
@@ -30,11 +31,11 @@ app.get('/health', (req, res) => {
 });
 
 // Routes
-app.use('/api', generatorRoute);
-app.use('/api', deployRoute);
-app.use('/api', projectRoute);
-app.use('/api', paymentRoute);
-app.use('/api', profileRoute);
+app.use('/api', authMiddleware, generatorRoute);
+app.use('/api', authMiddleware, deployRoute);
+app.use('/api', authMiddleware, projectRoute);
+app.use('/api', paymentRoute); // Payment route uses its own auth (RSA signature)
+app.use('/api', authMiddleware, profileRoute);
 
 // Error handling
 app.use(errorMiddleware);

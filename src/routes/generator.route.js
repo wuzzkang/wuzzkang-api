@@ -9,7 +9,6 @@ const router = Router();
  * Request body schema for the /generate endpoint.
  */
 const GenerateRequestSchema = z.object({
-    userId: z.string().uuid({ message: 'userId must be a valid UUID' }),
     name: z.string().min(3, 'name must be at least 3 characters').max(100, 'name must not exceed 100 characters'),
     prompt: z
         .string({ required_error: 'prompt is required' })
@@ -34,7 +33,8 @@ router.post('/generate', async (req, res, next) => {
     }
 
     try {
-        const { userId, name, prompt } = validation.data;
+        const { name, prompt } = validation.data;
+        const userId = req.user.id;
         const pageData = await generateLandingPage(prompt);
 
         // Save as draft in database

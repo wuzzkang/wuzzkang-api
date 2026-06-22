@@ -9,7 +9,6 @@ const router = Router();
  * Request body schema for deploying a draft project.
  */
 const DeployProjectSchema = z.object({
-    userId: z.string().uuid(),
     repoName: z.string().min(3).max(100),
 });
 
@@ -28,7 +27,8 @@ router.post('/projects/:id/deploy', async (req, res, next) => {
     }
 
     try {
-        const { userId, repoName } = validation.data;
+        const { repoName } = validation.data;
+        const userId = req.user.id;
         const result = await projectService.deployDraftProject(userId, id, repoName);
 
         return res.status(200).json(result);
@@ -43,9 +43,7 @@ router.post('/projects/:id/deploy', async (req, res, next) => {
 /**
  * Request body schema for retrying GitHub Pages.
  */
-const RetryPagesSchema = z.object({
-    userId: z.string().uuid(),
-});
+const RetryPagesSchema = z.object({});
 
 /**
  * POST /api/projects/:id/retry-pages
@@ -62,7 +60,7 @@ router.post('/projects/:id/retry-pages', async (req, res, next) => {
     }
 
     try {
-        const { userId } = validation.data;
+        const userId = req.user.id;
         const result = await projectService.retryGitHubPages(userId, id);
         return res.status(200).json(result);
     } catch (err) {
@@ -75,10 +73,7 @@ router.post('/projects/:id/retry-pages', async (req, res, next) => {
  * Lists projects for a user (userId passed as query param for now).
  */
 router.get('/projects', async (req, res, next) => {
-    const { userId } = req.query;
-    if (!userId) {
-        return res.status(400).json({ success: false, error: 'userId is required' });
-    }
+    const userId = req.user.id;
 
     try {
         const projects = await supabaseService.listProjects(userId);

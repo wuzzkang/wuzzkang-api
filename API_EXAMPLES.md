@@ -1,49 +1,49 @@
-# WuzzKang API - cURL Examples
+# WuzzKang API - cURL Examples (WITH JWT AUTH)
 
-Dokumen ini berisi kumpulan contoh perintah `cURL` untuk menguji berbagai *endpoint* di WuzzKang API. Anda bisa menyalin perintah di bawah ini ke terminal Anda.
+Dokumen ini berisi kumpulan contoh perintah `cURL` untuk menguji berbagai *endpoint* di WuzzKang API setelah penerapan sistem autentikasi.
 
-> **Catatan:**  
-> - Ganti `<USER_ID>` dengan UUID user yang valid dari tabel `profiles` Anda (misal: `7bcf3271-0d70-4429-88d5-10b9e9e33b61`).  
-> - Ganti `<PROJECT_ID>` dengan UUID proyek yang didapat setelah proses *Generate*.
-> - Pastikan server berjalan di `http://localhost:3026` (atau sesuaikan *port* Anda).
+> **PENTING: PERUBAHAN AUTHENTICATION**  
+> Semua request sekarang WAJIB menggunakan JWT Token (*Access Token*) dari Supabase Auth yang dikirimkan melalui *header* `Authorization`.  
+> Tidak ada lagi pengiriman `userId` lewat URL atau Request Body. Backend akan secara otomatis mengetahui identitas Anda dari Token.
+>
+> **Ganti `<JWT_TOKEN>` dengan token asli yang Anda dapat dari Supabase Login.**
+> **Ganti `<PROJECT_ID>` dengan UUID proyek Anda.**
 
 ---
 
 ### 1. Cek Saldo User (GET /api/profile)
-Mengecek informasi profil user termasuk saldo saat ini.
+Mengecek informasi profil dan saldo user yang sedang *login*.
 
 ```bash
-curl -s -X GET "http://localhost:3026/api/profile?userId=<USER_ID>" | jq
+curl -s -X GET "http://localhost:3026/api/profile" \
+-H "Authorization: Bearer <JWT_TOKEN>" | jq
 ```
 
 ---
 
 ### 2. Generate Landing Page (POST /api/generate)
-Menghasilkan konten *landing page* menggunakan AI dan langsung menyimpannya ke *database* sebagai `draft`.  
-**Biaya:** Gratis
+Menghasilkan konten *landing page* menggunakan AI.
 
 ```bash
 curl -s -X POST "http://localhost:3026/api/generate" \
+-H "Authorization: Bearer <JWT_TOKEN>" \
 -H "Content-Type: application/json" \
 -d '{
-  "userId": "<USER_ID>",
   "name": "Kopi Organik Jakarta",
   "prompt": "Landing page untuk toko kopi organik modern di Jakarta dengan desain minimalis"
 }' | jq
 ```
-*Catatan: Ambil `projectId` dari respons ini untuk tahap selanjutnya.*
 
 ---
 
 ### 3. Deploy Proyek (POST /api/projects/:id/deploy)
-Mendeploy proyek *draft* ke GitHub. Akan melakukan validasi saldo dan nama repo secara sinkron.  
-**Biaya:** 10.000 saldo (Dipotong otomatis)
+Mendeploy proyek *draft* ke GitHub. Akan melakukan potong saldo 10.000.
 
 ```bash
 curl -s -X POST "http://localhost:3026/api/projects/<PROJECT_ID>/deploy" \
+-H "Authorization: Bearer <JWT_TOKEN>" \
 -H "Content-Type: application/json" \
 -d '{
-  "userId": "<USER_ID>",
   "repoName": "kopi-organik-web"
 }' | jq
 ```
@@ -51,38 +51,31 @@ curl -s -X POST "http://localhost:3026/api/projects/<PROJECT_ID>/deploy" \
 ---
 
 ### 4. Cek Status Satu Proyek (GET /api/projects/:id)
-Melihat status *deployment* (`draft`, `deploying`, `deployed`, `failed`) dan seluruh detail JSON (`page_data`). Biasanya di-hit oleh Frontend secara berkala (*polling*) saat *loading* deploy.
+Melihat status *deployment* dan isi JSON lengkap.
 
 ```bash
-curl -s -X GET "http://localhost:3026/api/projects/<PROJECT_ID>" | jq
+curl -s -X GET "http://localhost:3026/api/projects/<PROJECT_ID>" \
+-H "Authorization: Bearer <JWT_TOKEN>" | jq
 ```
 
 ---
 
 ### 5. List Semua Proyek User (GET /api/projects)
-Menampilkan daftar semua proyek milik user. Respons endpoint ini sudah dioptimasi dengan mengecualikan `page_data` yang berat, sehingga sangat cepat dan cocok untuk halaman *Dashboard*.
+Menampilkan daftar proyek user saat ini.
 
 ```bash
-curl -s -X GET "http://localhost:3026/api/projects?userId=<USER_ID>" | jq
+curl -s -X GET "http://localhost:3026/api/projects" \
+-H "Authorization: Bearer <JWT_TOKEN>" | jq
 ```
 
 ---
 
 ### 6. Retry GitHub Pages (POST /api/projects/:id/retry-pages)
-Jika status proyek sudah `deployed` tapi GitHub Pages tidak merespons atau *error*, endpoint ini memaksa *backend* untuk menembak ulang API GitHub Pages tanpa mengulang proses *deploy* dari awal.  
-**Biaya:** Gratis
+Memaksa ulang koneksi ke GitHub Pages (Gratis).
 
 ```bash
 curl -s -X POST "http://localhost:3026/api/projects/<PROJECT_ID>/retry-pages" \
+-H "Authorization: Bearer <JWT_TOKEN>" \
 -H "Content-Type: application/json" \
--d '{
-  "userId": "<USER_ID>"
-}' | jq
+-d '{}' | jq
 ```
-
----
-
-### Tips Pengujian
-1. Gunakan opsi `| jq` di akhir perintah cURL (seperti contoh di atas) agar JSON yang dikembalikan oleh server diformat dengan rapi dan mudah dibaca di terminal.
-2. Uji skenario **Saldo Kosong**: Kosongkan saldo di Supabase, lalu jalankan endpoint Deploy. Anda harus mendapatkan status HTTP 402.
-3. Uji skenario **Repo Sudah Ada**: Gunakan nama repo yang memang sudah ada di GitHub organisasi Anda. Anda harus mendapatkan pesan error tanpa pemotongan saldo.

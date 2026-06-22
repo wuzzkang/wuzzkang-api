@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { walletService } from '../services/wallet.service.js';
+import { supabaseService } from '../services/supabase.service.js';
 
 const router = Router();
 
@@ -8,20 +8,13 @@ const router = Router();
  * Gets user profile (including balance).
  */
 router.get('/profile', async (req, res, next) => {
-    const { userId } = req.query;
-    
-    if (!userId) {
-        return res.status(400).json({ success: false, error: 'userId is required' });
-    }
+    const userId = req.user.id;
 
     try {
-        const balance = await walletService.getBalance(userId);
+        const profile = await supabaseService.getProfile(userId);
         return res.status(200).json({
             success: true,
-            data: {
-                id: userId,
-                balance: balance
-            }
+            data: profile
         });
     } catch (err) {
         return next(err);
