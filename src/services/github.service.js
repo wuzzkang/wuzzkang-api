@@ -98,18 +98,28 @@ export const githubService = {
      * @param {string} branch - The branch to use for Pages (default: 'main').
      */
     async enablePages(owner, repo, branch = 'main') {
-        try {
-            await octokit.rest.repos.enablePages({
-                owner,
-                repo,
-                source: {
-                    branch,
-                    path: '/',
-                },
-            });
-        } catch (error) {
-            // If already enabled, it might throw an error, we can ignore or handle it
-            console.warn(`[GitHubService] Warning enabling Pages: ${error.message}`);
+        const maxRetries = 3;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // Wait a bit before trying to enable Pages, as repo creation from template takes a moment
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                await octokit.rest.repos.createPagesSite({
+                    owner,
+                    repo,
+                    source: {
+                        branch,
+                        path: '/',
+                    },
+                });
+                console.log(`[GitHubService] Pages enabled successfully for ${repo}`);
+                return;
+            } catch (error) {
+                console.warn(`[GitHubService] Attempt ${attempt} enabling Pages failed: ${error.message}`);
+                if (attempt === maxRetries) {
+                    // It might already be enabled or fail for other reasons
+                }
+            }
         }
     },
 

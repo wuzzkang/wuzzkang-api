@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { generateLandingPage } from '../services/ai.service.js';
+import { supabaseService } from '../services/supabase.service.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -8,6 +9,8 @@ const router = Router();
  * Request body schema for the /generate endpoint.
  */
 const GenerateRequestSchema = z.object({
+    userId: z.string().uuid({ message: 'userId must be a valid UUID' }),
+    name: z.string().min(3, 'name must be at least 3 characters').max(100, 'name must not exceed 100 characters'),
     prompt: z
         .string({ required_error: 'prompt is required' })
         .min(10, 'prompt must be at least 10 characters')
@@ -31,12 +34,21 @@ router.post('/generate', async (req, res, next) => {
     }
 
     try {
-        const { prompt } = validation.data;
+        const { userId, name, prompt } = validation.data;
         const pageData = await generateLandingPage(prompt);
+
+        // Save as draft in database
+        const project = await supabaseService.saveProject(userId, {
+            name: name,
+            pageData: pageData,
+        });
 
         return res.status(200).json({
             success: true,
-            data: pageData,
+            data: {
+                projectId: project.id,
+                pageData: pageData,
+            }
         });
     } catch (err) {
         // Forward to centralized error middleware

@@ -6,21 +6,20 @@ import { z } from 'zod';
 const router = Router();
 
 /**
- * Request body schema for creating a project.
+ * Request body schema for deploying a draft project.
  */
-const CreateProjectSchema = z.object({
+const DeployProjectSchema = z.object({
     userId: z.string().uuid(),
-    name: z.string().min(3).max(100),
-    prompt: z.string().min(10).max(500),
     repoName: z.string().min(3).max(100),
 });
 
 /**
- * POST /api/projects
- * Creates a new project (Deducts balance, Generates AI, Saves, Queues Deployment).
+ * POST /api/projects/:id/deploy
+ * Deploys a draft project (Deducts balance, Queues Deployment).
  */
-router.post('/projects', async (req, res, next) => {
-    const validation = CreateProjectSchema.safeParse(req.body);
+router.post('/projects/:id/deploy', async (req, res, next) => {
+    const { id } = req.params;
+    const validation = DeployProjectSchema.safeParse(req.body);
     if (!validation.success) {
         return res.status(400).json({
             success: false,
@@ -29,14 +28,44 @@ router.post('/projects', async (req, res, next) => {
     }
 
     try {
-        const { userId, name, prompt, repoName } = validation.data;
-        const result = await projectService.createProject(userId, name, prompt, repoName);
+        const { userId, repoName } = validation.data;
+        const result = await projectService.deployDraftProject(userId, id, repoName);
 
-        return res.status(201).json(result);
+        return res.status(200).json(result);
     } catch (err) {
         if (err.message.includes('Saldo tidak cukup')) {
             return res.status(402).json({ success: false, error: err.message });
         }
+        return next(err);
+    }
+});
+
+/**
+ * Request body schema for retrying GitHub Pages.
+ */
+const RetryPagesSchema = z.object({
+    userId: z.string().uuid(),
+});
+
+/**
+ * POST /api/projects/:id/retry-pages
+ * Retries enabling GitHub Pages for an already deployed project.
+ */
+router.post('/projects/:id/retry-pages', async (req, res, next) => {
+    const { id } = req.params;
+    const validation = RetryPagesSchema.safeParse(req.body);
+    if (!validation.success) {
+        return res.status(400).json({
+            success: false,
+            error: validation.error.flatten().fieldErrors,
+        });
+    }
+
+    try {
+        const { userId } = validation.data;
+        const result = await projectService.retryGitHubPages(userId, id);
+        return res.status(200).json(result);
+    } catch (err) {
         return next(err);
     }
 });
