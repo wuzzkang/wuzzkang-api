@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node --experimental-fetch server.js",
-    "dev": "nodemon --exec 'node --experimental-fetch' server.js",
+    "dev": "node --watch server.js",
     "test:api": "node --experimental-fetch test-api.js",
     "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit",
     "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/integration --testTimeout=30000 --runInBand",
