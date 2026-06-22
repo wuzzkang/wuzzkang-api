@@ -8,7 +8,7 @@
 import crypto from 'crypto';
 import { PaymentGatewayInterface } from './interface.js';
 import { generateTimestamp, sortObject } from '../../utils/helpers.js';
-import { sanitizeKey, loadPrivateKey, generateSnapSignature, verifySnapSignature } from '../../utils/crypto.utils.js';
+import { sanitizeKey, loadPrivateKey, loadPublicKey, generateSnapSignature, verifySnapSignature } from '../../utils/crypto.utils.js';
 
 /**
  * Winpay payment provider implementation.
@@ -28,8 +28,13 @@ export class WinpayProvider extends PaymentGatewayInterface {
         // Private Key Loading: Moved to utility
         this.privateKey = loadPrivateKey('our_winpay_private.pem');
 
-        // Winpay Public Key for callback verification
-        this.winpayPublicKey = sanitizeKey(config.winpayPublicKey);
+        // Winpay Public Key for callback verification: Load from file
+        try {
+            this.winpayPublicKey = loadPublicKey('winpay_public_key.pem');
+        } catch (error) {
+            console.warn(`[WinpayProvider] Failed to load winpay_public_key.pem, falling back to config: ${error.message}`);
+            this.winpayPublicKey = sanitizeKey(config.winpayPublicKey);
+        }
     }
 
     /**
@@ -42,20 +47,37 @@ export class WinpayProvider extends PaymentGatewayInterface {
     /**
      * Verifies the signature of an inbound callback from Winpay.
      */
-    verifyCallback(payload, signature, method, url, timestamp) {
+    verifyCallback(payload, signature, method, url, timestamp, rawBody = null) {
         if (!signature) return false;
 
-        const sortedPayload = sortObject(payload);
-        const minifiedBody = JSON.stringify(sortedPayload);
+        // Use rawBody if available to ensure exact string match for signature
+        const minifiedBody = rawBody || JSON.stringify(sortObject(payload));
 
-        return verifySnapSignature(this.winpayPublicKey, minifiedBody, signature, method, url, timestamp);
+        const bodyHash = crypto
+            .createHash('sha256')
+            .update(minifiedBody)
+            .digest('hex')
+            .toLowerCase();
+
+        const stringToSign = `${method}:${url}:${bodyHash}:${timestamp}`;
+
+        const verifier = crypto.createVerify('RSA-SHA256');
+        verifier.update(stringToSign);
+
+        const isValid = verifier.verify(this.winpayPublicKey, signature, 'base64');
+
+        if (!isValid) {
+            console.error(`[WinpayProvider] Signature verification failed for ${method} ${url}`);
+        }
+
+        return isValid;
     }
 
     /**
      * Verifies a webhook signature.
      */
-    verifyWebhook(payload, signature) {
-        return this.verifyCallback(payload, signature, 'POST', '/api/payments/webhook', payload.timestamp || '');
+    verifyWebhook(payload, signature, method = 'POST', url = '/api/payments/webhook', timestamp = '', rawBody = null) {
+        return this.verifyCallback(payload, signature, method, url, timestamp, rawBody);
     }
 
     /**
@@ -163,7 +185,7 @@ export class WinpayProvider extends PaymentGatewayInterface {
      */
     getSuccessResponse(payload) {
         return {
-            responseCode: '2000000',
+            responseCode: '2002500',
             responseMessage: 'Successful',
         };
     }

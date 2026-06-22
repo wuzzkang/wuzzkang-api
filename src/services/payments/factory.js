@@ -11,6 +11,8 @@
  * 3. Environment Aware: Switches between Dummy and Production providers based on NODE_ENV.
  */
 
+import { config } from '../../config/index.js';
+
 /**
  * Factory for selecting and instantiating the appropriate payment gateway provider.
  */
@@ -30,7 +32,7 @@ export const PaymentFactory = {
     async getProvider() {
         if (this._instance) return this._instance;
 
-        const providerType = process.env.PAYMENT_PROVIDER || (process.env.NODE_ENV === 'production' ? 'winpay' : 'dummy');
+        const providerType = config.PAYMENT_PROVIDER || (config.NODE_ENV === 'production' ? 'winpay' : 'dummy');
 
         console.log(`[PaymentFactory] Initializing provider: ${providerType}`);
 
@@ -65,10 +67,9 @@ export const PaymentFactory = {
      */
     _getWinpayConfig() {
         return {
-            partnerId: process.env.WINPAY_PARTNER_ID,
-            privateKey: process.env.OUR_PRIVATE_KEY,
-            winpayPublicKey: process.env.WINPAY_PUBLIC_KEY,
-            baseUrl: process.env.WINPAY_BASE_URL,
+            partnerId: config.WINPAY_PARTNER_ID,
+            winpayPublicKey: config.WINPAY_PUBLIC_KEY,
+            baseUrl: config.WINPAY_BASE_URL,
         };
     },
 

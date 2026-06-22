@@ -1,13 +1,20 @@
 import { Router } from 'express';
-import { handleWebhook } from '../controllers/payment.controller.js';
+import { paymentController } from '../controllers/payment.controller.js';
+import { webhookController } from '../controllers/webhook.controller.js';
 
 const router = Router();
 
 /**
- * POST /api/payments/webhook
- * Handles inbound payment gateway webhook notifications.
- * This route is intentionally provider-agnostic via the PaymentFactory.
+ * POST /api/payments/create
+ * Initiates a new payment transaction.
  */
-router.post('/payments/webhook', handleWebhook);
+router.post('/payments/create', paymentController.createTransaction);
+
+/**
+ * POST /api/payment/webhook/* and /api/payments/webhook/*
+ * Handles inbound payment gateway webhook notifications with dynamic paths.
+ * Supports both /payment and /payments prefixes and channel-specific paths.
+ */
+router.post(/^\/payments?\/webhook.*/, webhookController.handleWinpayWebhook);
 
 export default router;

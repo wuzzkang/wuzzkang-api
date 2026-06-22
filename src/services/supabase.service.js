@@ -94,6 +94,25 @@ export const supabaseService = {
     },
 
     /**
+     * Updates the repository URL of a project.
+     * 
+     * @param {string} projectId - The ID of the project.
+     * @param {string} repoUrl - The URL of the GitHub repository.
+     * @returns {Promise<Object>} The updated project data.
+     */
+    async updateProjectRepoUrl(projectId, repoUrl) {
+        const { data, error } = await supabase
+            .from('projects')
+            .update({ repo_url: repoUrl, updated_at: new Date().toISOString() })
+            .eq('id', projectId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
+
+    /**
      * Checks if a transaction with the given orderId already exists.
      * 
      * @param {string} orderId - The unique order identifier.

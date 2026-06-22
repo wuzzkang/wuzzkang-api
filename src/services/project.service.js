@@ -21,15 +21,17 @@ export const projectService = {
         console.log(`[ProjectService] Starting project creation for user ${userId}...`);
 
         // 1. Deduct balance first (Fail fast if insufficient funds)
+        let transactionId;
         try {
-            await walletService.deductBalance(
+            const deduction = await walletService.deductBalance(
                 userId,
                 GENERATION_COST,
                 'generation',
                 null,
                 `Generation cost for project: ${projectName}`
             );
-            console.log(`[ProjectService] Balance deducted: ${GENERATION_COST}`);
+            transactionId = deduction.transactionId;
+            console.log(`[ProjectService] Balance deducted: ${GENERATION_COST}, Transaction ID: ${transactionId}`);
         } catch (error) {
             if (error.message === 'INSUFFICIENT_FUNDS') {
                 throw new Error('Saldo tidak cukup untuk membuat proyek. Biaya: 10.000');
@@ -50,6 +52,10 @@ export const projectService = {
                 pageData: pageData,
             });
             projectId = project.id;
+
+            // 3.1 Link transaction to project
+            console.log(`[ProjectService] Linking transaction ${transactionId} to project ${projectId}...`);
+            await walletService.updateTransactionProject(transactionId, projectId);
 
             // 4. Queue Deployment
             console.log(`[ProjectService] Queuing deployment for ${repoName}...`);

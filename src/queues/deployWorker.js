@@ -31,12 +31,20 @@ export function startDeployWorker() {
                 console.log(`[Worker] Updating content.json in ${repoName}...`);
                 await githubService.updateFileInRepo(repoName, pageData);
 
-                // 3. Update status in Supabase
-                console.log(`[Worker] Updating status to 'deployed' for Project ID: ${projectId}...`);
-                await supabaseService.updateProjectStatus(projectId, 'deployed');
+                // 3. Enable GitHub Pages
+                console.log(`[Worker] Enabling GitHub Pages for ${repoName}...`);
+                await githubService.enablePages(config.GITHUB_ORG_NAME, repoName);
+
+                // 4. Update status and repo URL in Supabase
+                console.log(`[Worker] Updating status and repo URL for Project ID: ${projectId}...`);
+                const repoUrl = `https://github.com/${config.GITHUB_ORG_NAME}/${repoName}`;
+                await Promise.all([
+                    supabaseService.updateProjectStatus(projectId, 'deployed'),
+                    supabaseService.updateProjectRepoUrl(projectId, repoUrl)
+                ]);
 
                 console.log(`[Worker] Deployment for ${repoName} successful!`);
-                return { success: true, repoUrl: `https://wuzzkang.github.io/${repoName}` };
+                return { success: true, repoUrl };
             } catch (error) {
                 console.error(`[Worker] Deployment failed for ${repoName}: ${error.message}`);
                 // Update status to 'failed' in Supabase if it's the last attempt

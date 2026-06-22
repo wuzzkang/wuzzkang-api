@@ -28,6 +28,21 @@ export function loadPrivateKey(filename = 'our_winpay_private.pem') {
 }
 
 /**
+ * Loads a public key from a PEM file in the project root.
+ * @param {string} filename - The filename of the PEM file.
+ * @returns {string} The public key content.
+ */
+export function loadPublicKey(filename = 'winpay_public_key.pem') {
+    try {
+        const keyPath = path.join(process.cwd(), filename);
+        return fs.readFileSync(keyPath, 'utf8');
+    } catch (error) {
+        console.error(`[CryptoUtils] Failed to load public key from ${filename}: ${error.message}`);
+        throw new Error(`Public Key missing or unreadable: ${filename}`);
+    }
+}
+
+/**
  * Generates a digital signature for a SNAP request.
  * 
  * @param {string} privateKey - The RSA private key.

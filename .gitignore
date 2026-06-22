@@ -6,3 +6,4 @@ gemini.MD
 test-api.js
 
 our_winpay_private.pem
+winpay_public_key.pem
