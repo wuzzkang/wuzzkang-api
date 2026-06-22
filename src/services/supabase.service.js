@@ -113,6 +113,25 @@ export const supabaseService = {
     },
 
     /**
+     * Updates the live URL of a project.
+     * 
+     * @param {string} projectId - The ID of the project.
+     * @param {string} liveUrl - The live URL of the published project.
+     * @returns {Promise<Object>} The updated project data.
+     */
+    async updateProjectLiveUrl(projectId, liveUrl) {
+        const { data, error } = await supabase
+            .from('projects')
+            .update({ live_url: liveUrl, updated_at: new Date().toISOString() })
+            .eq('id', projectId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
+
+    /**
      * Checks if a transaction with the given orderId already exists.
      * 
      * @param {string} orderId - The unique order identifier.

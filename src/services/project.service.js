@@ -25,9 +25,15 @@ export const projectService = {
         const project = await supabaseService.getProject(projectId);
         if (!project) throw new Error('Proyek tidak ditemukan.');
         if (project.user_id !== userId) throw new Error('Anda tidak memiliki akses ke proyek ini.');
-        if (project.status !== 'draft') throw new Error('Proyek sudah dideploy atau sedang dalam proses.');
+        if (project.status !== 'draft' && project.status !== 'failed') {
+            throw new Error('Proyek sudah dideploy atau sedang dalam proses.');
+        }
 
-        // 2. Deduct balance first (Fail fast if insufficient funds)
+        // 2. Check if repo name is available
+        const isRepoTaken = await githubService.checkRepoExists(repoName);
+        if (isRepoTaken) throw new Error(`Nama repository '${repoName}' sudah digunakan. Silakan pilih nama lain.`);
+
+        // 3. Deduct balance first (Fail fast if insufficient funds)
         let transactionId;
         try {
             const deduction = await walletService.deductBalance(

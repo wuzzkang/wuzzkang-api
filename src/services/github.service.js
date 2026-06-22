@@ -34,6 +34,26 @@ export const githubService = {
     },
 
     /**
+     * Checks if a repository already exists.
+     * 
+     * @param {string} repo - The name of the repository.
+     * @returns {Promise<boolean>} True if it exists, false otherwise.
+     */
+    async checkRepoExists(repo) {
+        const owner = config.GITHUB_ORG_NAME;
+        try {
+            await octokit.rest.repos.get({
+                owner,
+                repo,
+            });
+            return true;
+        } catch (error) {
+            if (error.status === 404) return false;
+            throw error;
+        }
+    },
+
+    /**
      * Updates content.json in the repository with new data.
      * 
      * @param {string} repo - The name of the repository.

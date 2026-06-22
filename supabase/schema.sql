@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS projects (
   name TEXT NOT NULL,
   page_data JSONB NOT NULL,
   repo_url TEXT,
+  live_url TEXT,
   status TEXT DEFAULT 'draft',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()

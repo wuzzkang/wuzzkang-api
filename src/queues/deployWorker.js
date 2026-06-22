@@ -2,6 +2,7 @@ import { Worker } from 'bullmq';
 import { redisConnection } from './queue.js';
 import { githubService } from '../services/github.service.js';
 import { supabaseService } from '../services/supabase.service.js';
+import { walletService } from '../services/wallet.service.js';
 import { config } from '../config/index.js';
 
 let workerInstance = null;
@@ -35,12 +36,15 @@ export function startDeployWorker() {
                 console.log(`[Worker] Enabling GitHub Pages for ${repoName}...`);
                 await githubService.enablePages(config.GITHUB_ORG_NAME, repoName);
 
-                // 4. Update status and repo URL in Supabase
-                console.log(`[Worker] Updating status and repo URL for Project ID: ${projectId}...`);
+                // 4. Update status and URLs in Supabase
+                console.log(`[Worker] Updating status and URLs for Project ID: ${projectId}...`);
                 const repoUrl = `https://github.com/${config.GITHUB_ORG_NAME}/${repoName}`;
+                const liveUrl = `https://${config.GITHUB_ORG_NAME}.github.io/${repoName}/`;
+                
                 await Promise.all([
                     supabaseService.updateProjectStatus(projectId, 'deployed'),
-                    supabaseService.updateProjectRepoUrl(projectId, repoUrl)
+                    supabaseService.updateProjectRepoUrl(projectId, repoUrl),
+                    supabaseService.updateProjectLiveUrl(projectId, liveUrl)
                 ]);
 
                 console.log(`[Worker] Deployment for ${repoName} successful!`);
@@ -50,6 +54,20 @@ export function startDeployWorker() {
                 // Update status to 'failed' in Supabase if it's the last attempt
                 if (job.attemptsMade >= (job.opts.attempts || 3) - 1) {
                     await supabaseService.updateProjectStatus(projectId, 'failed');
+                    
+                    // Refund the user since deployment failed
+                    try {
+                        const project = await supabaseService.getProject(projectId);
+                        console.log(`[Worker] Issuing refund of 10000 to user ${project.user_id}...`);
+                        await walletService.addTransaction(
+                            project.user_id,
+                            10000,
+                            'refund',
+                            `Refund for failed deployment of project: ${project.name}`
+                        );
+                    } catch (refundError) {
+                        console.error(`[Worker] CRITICAL: Refund failed for project ${projectId}: ${refundError.message}`);
+                    }
                 }
                 throw error;
             }
