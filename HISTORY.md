@@ -23,3 +23,12 @@ Dokumen ini berisi catatan perubahan dan fitur yang telah diimplementasikan dala
     - Automated Cleanup: Profile removal.
 - [x] Created `scripts/seed-user.js` for local development data seeding.
 - [x] Optimized testing environment with `nvm use 24` and `experimental-vm-modules`.
+
+## Phase 6: Core Deployment Features
+- [x] Separated Generation and Deployment flows for safer User Experience (Free Generate, Paid Deploy).
+- [x] Replaced `POST /projects` with `POST /generate` (saves project as draft) and `POST /projects/:id/deploy` (deducts balance and queues deployment).
+- [x] Implemented robust error handling: Synchronous GitHub repo name validation to prevent balance deduction on collision.
+- [x] Added `live_url` storage mapping to predict and store GitHub Pages URL reliably.
+- [x] Auto-refund mechanism in BullMQ worker for unrecoverable background deployment failures.
+- [x] Added GitHub Pages explicit retry endpoint `POST /projects/:id/retry-pages`.
+- [x] Optimized `GET /projects` list endpoint payload to exclude heavy `page_data` JSON.

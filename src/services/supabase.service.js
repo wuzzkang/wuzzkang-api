@@ -66,7 +66,7 @@ export const supabaseService = {
     async listProjects(userId) {
         const { data, error } = await supabase
             .from('projects')
-            .select('*')
+            .select('id, user_id, name, repo_url, live_url, status, created_at, updated_at')
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 
