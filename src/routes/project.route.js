@@ -9,12 +9,16 @@ const router = Router();
  * Request body schema for deploying a draft project.
  */
 const DeployProjectSchema = z.object({
-    repoName: z.string().min(3).max(100),
+    slug: z
+        .string()
+        .min(3)
+        .max(50)
+        .regex(/^[a-zA-Z0-9_-]+$/, 'Slug hanya boleh mengandung huruf, angka, strip (-), atau underscore (_)'),
 });
 
 /**
  * POST /api/projects/:id/deploy
- * Deploys a draft project (Deducts balance, Queues Deployment).
+ * Deploys a draft project (Deducts balance, Marks as Deployed).
  */
 router.post('/projects/:id/deploy', async (req, res, next) => {
     const { id } = req.params;
@@ -27,16 +31,16 @@ router.post('/projects/:id/deploy', async (req, res, next) => {
     }
 
     try {
-        const { repoName } = validation.data;
+        const { slug } = validation.data;
         const userId = req.user.id;
-        const result = await projectService.deployDraftProject(userId, id, repoName);
+        const result = await projectService.deployDraftProject(userId, id, slug);
 
         return res.status(200).json(result);
     } catch (err) {
         if (err.message.includes('Saldo tidak cukup')) {
             return res.status(402).json({ success: false, error: err.message });
         }
-        return next(err);
+        return res.status(400).json({ success: false, error: err.message });
     }
 });
 

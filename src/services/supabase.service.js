@@ -166,4 +166,47 @@ export const supabaseService = {
         if (error) throw error;
         return data;
     },
+
+    /**
+     * Retrieves a project by its slug.
+     * 
+     * @param {string} slug - The slug of the project.
+     * @returns {Promise<Object|null>} The project data or null.
+     */
+    async getProjectBySlug(slug) {
+        const { data, error } = await supabase
+            .from('projects')
+            .select('*')
+            .eq('slug', slug)
+            .maybeSingle();
+
+        if (error) throw error;
+        return data;
+    },
+
+    /**
+     * Deploys a project directly by updating status, slug, and live_url.
+     * 
+     * @param {string} projectId - The ID of the project.
+     * @param {string} slug - The deployment slug.
+     * @param {string} liveUrl - The URL of the live landing page.
+     * @returns {Promise<Object>} The updated project data.
+     */
+    async deployProject(projectId, slug, liveUrl) {
+        const { data, error } = await supabase
+            .from('projects')
+            .update({
+                slug,
+                status: 'deployed',
+                live_url: liveUrl,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', projectId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
 };
+

@@ -13,8 +13,10 @@ import { startDeployWorker } from './src/queues/deployWorker.js';
 
 const app = express();
 
-// Start background worker
-startDeployWorker();
+// Start background worker (disabled by default as deployment is now direct/db-driven)
+if (process.env.ENABLE_BG_WORKER === 'true') {
+    startDeployWorker();
+}
 
 // Middlewares
 app.use(cors());

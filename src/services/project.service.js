@@ -12,13 +12,13 @@ const GENERATION_COST = 10000; // 10,000 credits/balance
  */
 export const projectService = {
     /**
-     * Deploys a draft project: deducts balance, verifies draft, and queues deployment.
+     * Deploys a draft project: deducts balance, verifies draft, and marks it as deployed with a slug.
      * 
      * @param {string} userId - The ID of the user.
      * @param {string} projectId - The ID of the draft project.
-     * @param {string} repoName - The target GitHub repo name.
+     * @param {string} slug - The target slug for the landing page.
      */
-    async deployDraftProject(userId, projectId, repoName) {
+    async deployDraftProject(userId, projectId, slug) {
         console.log(`[ProjectService] Starting deployment for draft project ${projectId} by user ${userId}...`);
 
         // 1. Verify project
@@ -29,9 +29,11 @@ export const projectService = {
             throw new Error('Proyek sudah dideploy atau sedang dalam proses.');
         }
 
-        // 2. Check if repo name is available
-        const isRepoTaken = await githubService.checkRepoExists(repoName);
-        if (isRepoTaken) throw new Error(`Nama repository '${repoName}' sudah digunakan. Silakan pilih nama lain.`);
+        // 2. Check if slug is available
+        const existingProjectWithSlug = await supabaseService.getProjectBySlug(slug);
+        if (existingProjectWithSlug) {
+            throw new Error(`Slug '${slug}' sudah digunakan. Silakan pilih slug lain.`);
+        }
 
         // 3. Deduct balance first (Fail fast if insufficient funds)
         let transactionId;
@@ -53,25 +55,21 @@ export const projectService = {
         }
 
         try {
-            // 3. Update status to deploying
-            await supabaseService.updateProjectStatus(projectId, 'deploying');
-
-            // 4. Queue Deployment
-            console.log(`[ProjectService] Queuing deployment for ${repoName}...`);
-            const queue = getDeploymentQueue();
-            await queue.add('deploy-job', {
-                projectId,
-                pageData: project.page_data,
-                repoName,
-            });
+            // 4. Directly mark as deployed and set slug + live URL
+            const templateBaseUrl = process.env.LANDING_PAGE_TEMPLATE_URL || 'http://localhost:5000/?slug=';
+            const liveUrl = `${templateBaseUrl}${slug}`;
+            
+            console.log(`[ProjectService] Marking project ${projectId} as deployed with slug ${slug}...`);
+            await supabaseService.deployProject(projectId, slug, liveUrl);
 
             return {
                 success: true,
                 projectId,
-                message: 'Proyek sedang dideploy.',
+                liveUrl,
+                message: 'Proyek berhasil dideploy.',
             };
         } catch (error) {
-            console.error(`[ProjectService] Error during deployment queuing: ${error.message}`);
+            console.error(`[ProjectService] Error during direct deployment: ${error.message}`);
 
             // Rollback: Refund balance if execution fails
             try {
@@ -80,12 +78,11 @@ export const projectService = {
                     userId,
                     GENERATION_COST,
                     'refund',
-                    `Refund for failed deployment queuing: ${project.name}`
+                    `Refund for failed deployment: ${project.name}`
                 );
                 console.log(`[ProjectService] Refund successful.`);
             } catch (refundError) {
                 console.error(`[ProjectService] CRITICAL: Refund failed for user ${userId}: ${refundError.message}`);
-                // We don't throw refundError here to ensure the original error is re-thrown
             }
 
             // Re-throw original error
