@@ -11,7 +11,7 @@ const router = Router();
 const GenerateRequestSchema = z.object({
     projectId: z.string().uuid().optional().nullable(),
     name: z.string().min(3, 'name must be at least 3 characters').max(100, 'name must not exceed 100 characters'),
-    template_type: z.enum(['store', 'wedding']).default('store'),
+    template_type: z.string().default('store'),
     prompt: z
         .string()
         .max(500, 'prompt must not exceed 500 characters')
@@ -78,6 +78,21 @@ router.post('/generate', async (req, res, next) => {
     try {
         const { projectId, name, prompt, template_type, wedding_details } = validation.data;
         const userId = req.user.id;
+
+        // Check if template_type is active and registered in the database products table
+        const product = await supabaseService.getProduct(template_type);
+        if (!product) {
+            return res.status(400).json({
+                success: false,
+                error: { template_type: [`Tipe template '${template_type}' tidak terdaftar.`] },
+            });
+        }
+        if (!product.is_active) {
+            return res.status(400).json({
+                success: false,
+                error: { template_type: [`Layanan pembuatan '${product.name}' saat ini dinonaktifkan sementara.`] },
+            });
+        }
 
         // Custom validation check: if template_type is wedding, wedding_details is required
         if (template_type === 'wedding' && !wedding_details) {

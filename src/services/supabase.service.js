@@ -261,6 +261,45 @@ export const supabaseService = {
             path: data.path,
             publicUrl: publicUrlData.publicUrl
         };
+    },
+
+    /**
+     * Fetches all products from the products table.
+     * 
+     * @returns {Promise<Array>} List of all products.
+     */
+    async getProducts() {
+        const { data, error } = await supabase
+            .from('products')
+            .select('*')
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            // Friendly error logging if the table hasn't been created yet
+            console.error('[SupabaseService] Error fetching products. Have you run the schema migration?', error.message);
+            return [];
+        }
+        return data || [];
+    },
+
+    /**
+     * Fetches a single product by ID.
+     * 
+     * @param {string} id - The ID of the product.
+     * @returns {Promise<Object|null>} The product details or null.
+     */
+    async getProduct(id) {
+        const { data, error } = await supabase
+            .from('products')
+            .select('*')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (error) {
+            console.error(`[SupabaseService] Error fetching product ${id}:`, error.message);
+            return null;
+        }
+        return data;
     }
 };
 

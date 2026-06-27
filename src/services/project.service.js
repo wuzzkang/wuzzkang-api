@@ -5,8 +5,6 @@ import { getDeploymentQueue } from '../queues/queue.js';
 import { githubService } from './github.service.js';
 import { config } from '../config/index.js';
 
-const GENERATION_COST = 10000; // 10,000 credits/balance
-
 /**
  * Orchestrator service for project-related operations.
  */
@@ -49,22 +47,43 @@ export const projectService = {
         const finalSlug = await generateFinalSlug(slug);
         console.log(`[ProjectService] Generated unique slug: '${finalSlug}' (from user input: '${slug}')`);
 
+        // Get template type from project data to determine cost dynamically
+        let pageConfig = project.page_data;
+        if (typeof pageConfig === 'string') {
+            try {
+                pageConfig = JSON.parse(pageConfig);
+            } catch (e) {
+                console.error('[ProjectService] Failed to parse page_data JSON:', e);
+            }
+        }
+        const templateType = pageConfig?.meta?.template_type || 'store';
+
+        // Fetch dynamic product cost and status from database
+        const product = await supabaseService.getProduct(templateType);
+        if (!product) {
+            throw new Error(`Tipe template '${templateType}' tidak valid atau belum terdaftar.`);
+        }
+        if (!product.is_active) {
+            throw new Error(`Layanan pembuatan '${product.name}' saat ini sedang dinonaktifkan sementara.`);
+        }
+
+        const dynamicCost = product.cost ?? 10000;
 
         // 3. Deduct balance first (Fail fast if insufficient funds)
         let transactionId;
         try {
             const deduction = await walletService.deductBalance(
                 userId,
-                GENERATION_COST,
+                dynamicCost,
                 'deployment',
                 projectId,
                 `Deployment cost for project: ${project.name}`
             );
             transactionId = deduction.transactionId;
-            console.log(`[ProjectService] Balance deducted: ${GENERATION_COST}, Transaction ID: ${transactionId}`);
+            console.log(`[ProjectService] Balance deducted: ${dynamicCost}, Transaction ID: ${transactionId}`);
         } catch (error) {
             if (error.message === 'INSUFFICIENT_FUNDS') {
-                throw new Error('Saldo tidak cukup untuk mendeploy proyek. Biaya: 10.000');
+                throw new Error(`Saldo tidak cukup untuk mendeploy proyek. Biaya: Rp ${dynamicCost.toLocaleString('id-ID')}`);
             }
             throw error;
         }
@@ -98,10 +117,10 @@ export const projectService = {
 
             // Rollback: Refund balance if execution fails
             try {
-                console.log(`[ProjectService] Attempting to refund ${GENERATION_COST} credits to user ${userId}...`);
+                console.log(`[ProjectService] Attempting to refund ${dynamicCost} credits to user ${userId}...`);
                 await walletService.addTransaction(
                     userId,
-                    GENERATION_COST,
+                    dynamicCost,
                     'refund',
                     `Refund for failed deployment: ${project.name}`
                 );
