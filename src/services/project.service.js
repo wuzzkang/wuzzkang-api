@@ -29,11 +29,26 @@ export const projectService = {
             throw new Error('Proyek sudah dideploy atau sedang dalam proses.');
         }
 
-        // 2. Check if slug is available
-        const existingProjectWithSlug = await supabaseService.getProjectBySlug(slug);
-        if (existingProjectWithSlug) {
-            throw new Error(`Slug '${slug}' sudah digunakan. Silakan pilih slug lain.`);
-        }
+        // 2. Generate a globally unique final slug by appending a short random suffix.
+        // This allows different users to have the same "base" slug (e.g. "pernikahan-bambang")
+        // without conflict, since the final slug will differ (e.g. "pernikahan-bambang-x7k2").
+        const generateFinalSlug = async (baseSlug, attempts = 0) => {
+            if (attempts >= 5) {
+                throw new Error('Gagal membuat slug unik setelah beberapa percobaan. Silakan coba lagi.');
+            }
+            const suffix = Math.random().toString(36).substring(2, 6); // e.g. "x7k2"
+            const candidate = `${baseSlug}-${suffix}`;
+            const existing = await supabaseService.getProjectBySlug(candidate);
+            if (existing) {
+                // Very rare collision — retry with a new suffix
+                return generateFinalSlug(baseSlug, attempts + 1);
+            }
+            return candidate;
+        };
+
+        const finalSlug = await generateFinalSlug(slug);
+        console.log(`[ProjectService] Generated unique slug: '${finalSlug}' (from user input: '${slug}')`);
+
 
         // 3. Deduct balance first (Fail fast if insufficient funds)
         let transactionId;
@@ -57,10 +72,10 @@ export const projectService = {
         try {
             // 4. Directly mark as deployed and set slug + live URL
             const templateBaseUrl = process.env.LANDING_PAGE_TEMPLATE_URL || 'http://localhost:5000/?slug=';
-            const liveUrl = `${templateBaseUrl}${slug}`;
+            const liveUrl = `${templateBaseUrl}${finalSlug}`;
             
-            console.log(`[ProjectService] Marking project ${projectId} as deployed with slug ${slug}...`);
-            await supabaseService.deployProject(projectId, slug, liveUrl);
+            console.log(`[ProjectService] Marking project ${projectId} as deployed with slug ${finalSlug}...`);
+            await supabaseService.deployProject(projectId, finalSlug, liveUrl);
 
             // 5. Mark transaction as PAID after successful deployment
             try {
@@ -75,6 +90,7 @@ export const projectService = {
                 success: true,
                 projectId,
                 liveUrl,
+                finalSlug,
                 message: 'Proyek berhasil dideploy.',
             };
         } catch (error) {
