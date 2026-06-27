@@ -32,6 +32,12 @@ CREATE TABLE IF NOT EXISTS products (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Enable Row Level Security (RLS)
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+
+-- Create policy to allow read access to anyone (public select)
+CREATE POLICY "Allow public read access" ON products FOR SELECT USING (true);
+
 -- Seed initial products
 INSERT INTO products (id, name, is_active, cost) VALUES
   ('store', 'Toko Online / Bisnis', TRUE, 10000),
