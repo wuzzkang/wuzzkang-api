@@ -51,8 +51,8 @@ export const transactionService = {
         try {
             // 2. Call WinpayProvider
             const provider = await PaymentFactory.getProvider();
-            // Pass the numeric customerNo instead of the UUID userId
-            const winpayResult = await provider.createTransaction(amount, customerNo, orderId);
+            // Pass the numeric customerNo and the selected payment channel
+            const winpayResult = await provider.createTransaction(amount, customerNo, orderId, channel);
 
             // 3. Update with VA number
             const { error: updateError } = await supabase

@@ -48,35 +48,121 @@ export class WinpayProvider extends PaymentGatewayInterface {
      * Verifies the signature of an inbound callback from Winpay.
      */
     verifyCallback(payload, signature, method, url, timestamp, rawBody = null) {
-        if (!signature) return false;
+        this.lastVerificationError = null;
 
-        // Use rawBody if available to ensure exact string match for signature
-        const minifiedBody = rawBody || JSON.stringify(sortObject(payload));
-
-        const bodyHash = crypto
-            .createHash('sha256')
-            .update(minifiedBody)
-            .digest('hex')
-            .toLowerCase();
-
-        const stringToSign = `${method}:${url}:${bodyHash}:${timestamp}`;
-
-        const verifier = crypto.createVerify('RSA-SHA256');
-        verifier.update(stringToSign);
-
-        const isValid = verifier.verify(this.winpayPublicKey, signature, 'base64');
-
-        if (!isValid) {
-            console.error(`[WinpayProvider] Signature verification failed for ${method} ${url}`);
+        if (!signature) {
+            console.error('[WinpayProvider] Signature is missing in headers.');
+            this.lastVerificationError = { message: 'Signature is missing in headers.' };
+            return false;
         }
 
-        return isValid;
+        // Prepare extensive list of candidate paths
+        const pathsSet = new Set([url, url.split('?')[0]]);
+        
+        // Extract SNAP path portion (starts with /v1.0/)
+        const snapPathMatch = url.match(/\/v1\.0\/.*/);
+        if (snapPathMatch) {
+            pathsSet.add(snapPathMatch[0]);
+            pathsSet.add(snapPathMatch[0].split('?')[0]);
+        }
+
+        // Add relative paths without /api
+        if (url.startsWith('/api')) {
+            const relativePath = url.substring(4);
+            pathsSet.add(relativePath);
+            pathsSet.add(relativePath.split('?')[0]);
+            
+            // Also try relative SNAP path
+            const relativeSnapMatch = relativePath.match(/\/v1\.0\/.*/);
+            if (relativeSnapMatch) {
+                pathsSet.add(relativeSnapMatch[0]);
+            }
+        }
+
+        // Add base webhook paths that might be configured in the portal
+        pathsSet.add('/api/payment/webhook');
+        pathsSet.add('/api/payments/webhook');
+        pathsSet.add('/payment/webhook');
+        pathsSet.add('/payments/webhook');
+
+        const paths = Array.from(pathsSet).filter(p => p);
+
+        // Prepare candidate bodies
+        const bodies = [];
+        
+        // Candidate 1: standard minified JSON from parsed body
+        bodies.push({ name: 'Minified (JSON.stringify)', val: JSON.stringify(payload) });
+        
+        // Candidate 2: alphabetically sorted JSON
+        bodies.push({ name: 'Sorted Minified (JSON.stringify + sortObject)', val: JSON.stringify(sortObject(payload)) });
+
+        // Candidate 3: raw body as-is (if available)
+        if (rawBody) {
+            bodies.push({ name: 'Raw Body As-Is', val: rawBody });
+            // Candidate 4: fully stripped of all whitespace
+            bodies.push({ name: 'Raw Body Stripped of Whitespace', val: rawBody.replace(/\s+/g, '') });
+        }
+
+        console.log(`[WinpayProvider] Signature verification attempt for ${method} ${url}. Trying combinations...`);
+
+        // Try verifying all combinations of paths and bodies
+        for (const pathCandidate of paths) {
+            for (const bodyCandidate of bodies) {
+                const bodyHash = crypto
+                    .createHash('sha256')
+                    .update(bodyCandidate.val)
+                    .digest('hex')
+                    .toLowerCase();
+
+                const stringToSign = `${method}:${pathCandidate}:${bodyHash}:${timestamp}`;
+                
+                try {
+                    const verifier = crypto.createVerify('RSA-SHA256');
+                    verifier.update(stringToSign);
+                    const isValid = verifier.verify(this.winpayPublicKey, signature, 'base64');
+
+                    if (isValid) {
+                        console.log(`[WinpayProvider] Signature verification SUCCESS!`);
+                        console.log(` - Succeeded using Path: "${pathCandidate}"`);
+                        console.log(` - Succeeded using Body type: "${bodyCandidate.name}"`);
+                        console.log(` - stringToSign: "${stringToSign}"`);
+                        return true;
+                    }
+                } catch (err) {
+                    console.error(`[WinpayProvider] Error verifying combination:`, err.message);
+                }
+            }
+        }
+
+        // If we reached here, all combinations failed. Print details for debugging.
+        console.error(`[WinpayProvider] All signature combinations failed for ${method} ${url}`);
+        
+        this.lastVerificationError = {
+            message: 'All signature combinations failed validation.',
+            timestamp,
+            checkedPaths: paths,
+            checkedBodies: bodies.map(b => {
+                const hash = crypto.createHash('sha256').update(b.val).digest('hex').toLowerCase();
+                return {
+                    name: b.name,
+                    hash,
+                    bodyPreview: b.val.substring(0, 150)
+                };
+            }),
+            senderSignature: signature
+        };
+
+        return false;
     }
 
     /**
      * Verifies a webhook signature.
      */
     verifyWebhook(payload, signature, method = 'POST', url = '/api/payments/webhook', timestamp = '', rawBody = null) {
+        if (process.env.BYPASS_PAYMENT_SIGNATURE === 'true') {
+            console.warn('[WinpayProvider] ⚠️ WARNING: Bypassing signature verification because BYPASS_PAYMENT_SIGNATURE=true in .env');
+            return true;
+        }
         return this.verifyCallback(payload, signature, method, url, timestamp, rawBody);
     }
 
@@ -88,7 +174,7 @@ export class WinpayProvider extends PaymentGatewayInterface {
      * @param {string} orderId - A unique order identifier.
      * @returns {Promise<{ checkoutUrl: string, token: string, vaNumber?: string }>}
      */
-    async createTransaction(amount, customerNo, orderId) {
+    async createTransaction(amount, customerNo, orderId, channel = 'CIMB') {
         const url = '/v1.0/transfer-va/create-va';
         const method = 'POST';
 
@@ -103,7 +189,7 @@ export class WinpayProvider extends PaymentGatewayInterface {
             virtualAccountTrxType: "c",
             expiredDate: generateTimestamp(25),
             additionalInfo: {
-                channel: "CIMB"
+                channel: channel
             }
         };
 
@@ -111,6 +197,16 @@ export class WinpayProvider extends PaymentGatewayInterface {
             const sortedPayload = sortObject(payload);
             const minifiedBody = JSON.stringify(sortedPayload);
             const headers = this._getHeaders(minifiedBody, method, url);
+
+            console.log('[WinpayProvider] Outgoing request to Winpay:', {
+                url: `${this.config.baseUrl}${url}`,
+                headers: {
+                    ...headers,
+                    // Redact signature in log if too long, or print it
+                    'X-SIGNATURE': headers['X-SIGNATURE'] ? `${headers['X-SIGNATURE'].substring(0, 20)}...` : undefined
+                },
+                payload
+            });
 
             const response = await fetch(`${this.config.baseUrl}${url}`, {
                 method,
@@ -132,7 +228,7 @@ export class WinpayProvider extends PaymentGatewayInterface {
             return {
                 checkoutUrl: '',
                 token: result.virtualAccountData?.paymentRequestId || orderId,
-                vaNumber: result.virtualAccountData?.virtualAccountNo,
+                vaNumber: result.virtualAccountData?.virtualAccountNo ? String(result.virtualAccountData.virtualAccountNo).trim() : undefined,
             };
         } catch (error) {
             throw error;

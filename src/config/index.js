@@ -28,6 +28,7 @@ const configSchema = z.object({
     WINPAY_PARTNER_ID: z.string().optional(),
     WINPAY_BASE_URL: z.string().url().optional(),
     WINPAY_PUBLIC_KEY: z.string().optional(),
+    BYPASS_PAYMENT_SIGNATURE: z.string().optional(),
 });
 
 const parsedConfig = configSchema.safeParse(process.env);

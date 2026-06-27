@@ -39,7 +39,17 @@ export function startDeployWorker() {
                 // 4. Update status and URLs in Supabase
                 console.log(`[Worker] Updating status and URLs for Project ID: ${projectId}...`);
                 const repoUrl = `https://github.com/${config.GITHUB_ORG_NAME}/${repoName}`;
-                const liveUrl = `https://${config.GITHUB_ORG_NAME}.github.io/${repoName}/`;
+                
+                // Fetch the project to get its custom slug
+                const project = await supabaseService.getProject(projectId);
+                const templateBaseUrl = process.env.LANDING_PAGE_TEMPLATE_URL;
+                
+                let liveUrl;
+                if (templateBaseUrl) {
+                    liveUrl = `${templateBaseUrl}${project.slug || repoName}`;
+                } else {
+                    liveUrl = `https://${config.GITHUB_ORG_NAME}.github.io/${repoName}/`;
+                }
                 
                 await Promise.all([
                     supabaseService.updateProjectStatus(projectId, 'deployed'),

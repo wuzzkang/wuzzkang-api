@@ -26,10 +26,16 @@ export const webhookController = {
 
             if (!isValid) {
                 console.error(`[WebhookController] Invalid signature for order ${payload.trxId}`);
-                return res.status(401).json({
+                const responsePayload = {
                     responseCode: '4012700',
                     responseMessage: 'Invalid Signature'
-                });
+                };
+
+                if (provider.lastVerificationError) {
+                    responsePayload.debugInfo = provider.lastVerificationError;
+                }
+
+                return res.status(401).json(responsePayload);
             }
 
             // 2. Find Transaction
