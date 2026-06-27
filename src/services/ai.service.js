@@ -31,7 +31,7 @@ function getAIClient() {
   throw new Error(`Unknown AI_PROVIDER: ${AI_PROVIDER}`);
 }
 
-const SYSTEM_PROMPT = `You are a landing page content generator for a SaaS platform called WuzzKang.
+const SYSTEM_PROMPT = `You are a landing page content generator for a SaaS platform called Siluet.
 
 Your task is to output a SINGLE valid JSON object — no markdown, no code blocks, no extra text.
 
@@ -62,7 +62,7 @@ Rules:
 - All strings must obey the character limits.
 - Output ONLY the raw JSON object.`;
 
-const WEDDING_SYSTEM_PROMPT = `You are a creative copywriter and UI theme designer for WuzzKang wedding invitations.
+const WEDDING_SYSTEM_PROMPT = `You are a creative copywriter and UI theme designer for Siluet wedding invitations.
 
 Your task is to output a SINGLE valid JSON object based on the user's prompt (which describes theme/color preferences or quotes).
 Do not include any markdown, code blocks, or extra text.

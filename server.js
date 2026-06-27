@@ -56,6 +56,6 @@ import { fileURLToPath } from 'url';
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
     app.listen(PORT, () => {
-        console.log(`🚀 WuzzKang API running on port ${PORT} in ${config.NODE_ENV} mode`);
+        console.log(`🚀 Siluet API running on port ${PORT} in ${config.NODE_ENV} mode`);
     });
 }
