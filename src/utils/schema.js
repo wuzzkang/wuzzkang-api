@@ -21,18 +21,18 @@ const ContentSchema = z.object({
 });
 
 /**
- * Schema for metadata of the landing page.
+ * Schema for metadata of the store landing page.
  */
 const MetaSchema = z.object({
     title: z.string().min(3).max(80).describe('Page browser tab title'),
     theme: z.enum(['light', 'dark', 'corporate', 'retro', 'cyberpunk']).describe('DaisyUI theme name'),
+    template_type: z.literal('store').default('store'),
 });
 
 /**
- * Master Zod schema for the AI-generated landing page JSON.
- * This is the source of truth for what the AI must produce.
+ * Zod schema for the store template landing page JSON.
  */
-export const PageSchema = z.object({
+const StorePageSchema = z.object({
     meta: MetaSchema,
     content: ContentSchema,
     features: z
@@ -41,3 +41,60 @@ export const PageSchema = z.object({
         .max(6)
         .describe('List of 2-6 feature highlights'),
 });
+
+/**
+ * Zod schema for the wedding template landing page JSON.
+ */
+const WeddingPageSchema = z.object({
+    meta: z.object({
+        title: z.string().min(3).max(80).describe('Page browser tab title'),
+        theme: z.enum(['sage-green', 'rose-gold', 'elegant-navy', 'classic-gold', 'rustic-brown', 'floral-pink']).describe('Wedding color theme name'),
+        template_type: z.literal('wedding'),
+        design_key: z.enum(['sage-green', 'floral-pink']).default('sage-green'),
+    }),
+    content: z.object({
+        groom: z.object({
+            name: z.string().min(2).max(100),
+            nickname: z.string().min(1).max(50),
+            father: z.string().min(2).max(100),
+            mother: z.string().min(2).max(100),
+            image_url: z.string().optional().nullable(),
+        }),
+        bride: z.object({
+            name: z.string().min(2).max(100),
+            nickname: z.string().min(1).max(50),
+            father: z.string().min(2).max(100),
+            mother: z.string().min(2).max(100),
+            image_url: z.string().optional().nullable(),
+        }),
+        story: z.array(z.object({
+            title: z.string().min(1).max(100),
+            date: z.string().min(1).max(50),
+            desc: z.string().min(1).max(500),
+            image_url: z.string().optional().nullable(),
+        })).optional().nullable(),
+        akad: z.object({
+            date: z.string(),
+            time: z.string(),
+            location: z.string().min(3).max(200),
+            maps_url: z.string().optional().nullable(),
+        }),
+        resepsi: z.object({
+            date: z.string(),
+            time: z.string(),
+            location: z.string().min(3).max(200),
+            maps_url: z.string().optional().nullable(),
+        }),
+        gift: z.object({
+            bank_name: z.string().max(50).optional().nullable(),
+            account_number: z.string().max(50).optional().nullable(),
+            account_holder: z.string().max(100).optional().nullable(),
+        }).optional().nullable(),
+        quote: z.string().min(10).max(500).describe('AI-generated romantic quote or prayer'),
+    }),
+});
+
+/**
+ * Master Zod union schema. Automatically detects store vs wedding based on template_type.
+ */
+export const PageSchema = z.union([StorePageSchema, WeddingPageSchema]);

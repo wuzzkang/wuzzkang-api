@@ -62,25 +62,82 @@ Rules:
 - All strings must obey the character limits.
 - Output ONLY the raw JSON object.`;
 
+const WEDDING_SYSTEM_PROMPT = `You are a creative copywriter and UI theme designer for WuzzKang wedding invitations.
+
+Your task is to output a SINGLE valid JSON object based on the user's prompt (which describes theme/color preferences or quotes).
+Do not include any markdown, code blocks, or extra text.
+
+The JSON object MUST strictly follow this structure:
+{
+  "theme": "sage-green | rose-gold | elegant-navy | classic-gold | rustic-brown",
+  "quote": "string (a beautiful romantic or religious marriage quote/prayer, 30-250 characters)"
+}
+
+Rules:
+- Keep the quote concise, meaningful, and romantic.
+- Choose the theme that matches the user's color or stylistic request. If none matches, default to "classic-gold".
+- Output ONLY the raw JSON object.`;
+
 /**
  * Generates a complete landing page JSON object using the Sumopod AI API.
  * The response is validated against the PageSchema before being returned.
  *
  * @param {string} prompt - The user-provided description or niche for the landing page.
+ * @param {string} [templateType='store'] - The type of template: 'store' or 'wedding'.
+ * @param {object} [weddingDetails=null] - Pre-structured wedding info (names, dates, locations) to merge with AI output.
  * @returns {Promise<import('../utils/schema.js').PageSchema>} Validated landing page data.
  * @throws {Error} If the API call fails, JSON parsing fails, or schema validation fails.
  */
-export async function generateLandingPage(prompt) {
+export async function generateLandingPage(prompt, templateType = 'store', weddingDetails = null) {
   const client = getAIClient();
   let rawContent;
 
+  if (templateType === 'wedding') {
+    if (!weddingDetails) {
+      throw new Error('weddingDetails is required for wedding template type.');
+    }
+
+    // Bypass LLM completely if prompt is empty
+    if (!prompt || !prompt.trim()) {
+      const designKey = weddingDetails.design_key || 'sage-green';
+      const theme = weddingDetails.theme || designKey;
+      const finalData = {
+        meta: {
+          title: `Undangan Pernikahan ${weddingDetails.groom?.nickname || 'Groom'} & ${weddingDetails.bride?.nickname || 'Bride'}`,
+          theme: theme,
+          template_type: 'wedding',
+          design_key: designKey,
+        },
+        content: {
+          ...weddingDetails,
+          quote: weddingDetails.quote || 'Dan di antara tanda-tanda kekuasaan-Nya ialah Dia menciptakan untukmu isteri-isteri dari jenismu sendiri, supaya kamu cenderung dan merasa tenteram kepadanya, dan dijadikan-Nya diantaramu rasa kasih dan sayang. (Ar-Rum: 21)',
+        },
+      };
+
+      const validation = PageSchema.safeParse(finalData);
+      if (!validation.success) {
+        const issues = validation.error.flatten();
+        console.error('[ai.service] PageSchema validation failed (no-prompt):', JSON.stringify(issues, null, 2));
+        throw new Error(
+          `AI output failed schema validation: ${JSON.stringify(issues.fieldErrors)}`
+        );
+      }
+      return validation.data;
+    }
+  }
+
   try {
+    const activeSystemPrompt = templateType === 'wedding' ? WEDDING_SYSTEM_PROMPT : SYSTEM_PROMPT;
+    const userPrompt = templateType === 'wedding'
+      ? `Generate wedding theme and quote for preference: ${prompt}`
+      : `Generate a landing page for: ${prompt}`;
+
     const completion = await client.chat.completions.create({
       model: config.AI_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'meta-llama/llama-4-maverick:free',
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `Generate a landing page for: ${prompt}` },
+        { role: 'system', content: activeSystemPrompt },
+        { role: 'user', content: userPrompt },
       ],
     });
 
@@ -90,7 +147,7 @@ export async function generateLandingPage(prompt) {
       throw new Error('AI returned an empty response.');
     }
   } catch (err) {
-    console.error('[ai.service] Sumopod API call failed:', { message: err.message });
+    console.error('[ai.service] AI call failed:', { message: err.message });
     throw new Error(`AI API call failed: ${err.message}`);
   }
 
@@ -102,7 +159,31 @@ export async function generateLandingPage(prompt) {
     throw new Error('AI returned malformed JSON that could not be parsed.');
   }
 
-  const validation = PageSchema.safeParse(parsed);
+  // Construct and validate final object depending on template type
+  let finalData;
+  if (templateType === 'wedding') {
+    const designKey = weddingDetails.design_key || (parsed.theme === 'floral-pink' ? 'floral-pink' : 'sage-green');
+    finalData = {
+      meta: {
+        title: `Undangan Pernikahan ${weddingDetails.groom?.nickname || 'Groom'} & ${weddingDetails.bride?.nickname || 'Bride'}`,
+        theme: parsed.theme || designKey,
+        template_type: 'wedding',
+        design_key: designKey,
+      },
+      content: {
+        ...weddingDetails,
+        quote: parsed.quote || 'Semoga menjadi keluarga yang sakinah, mawaddah, warahmah.',
+      },
+    };
+  } else {
+    finalData = parsed;
+    // ensure template_type is set for consistency
+    if (finalData.meta) {
+      finalData.meta.template_type = 'store';
+    }
+  }
+
+  const validation = PageSchema.safeParse(finalData);
   if (!validation.success) {
     const issues = validation.error.flatten();
     console.error('[ai.service] PageSchema validation failed:', JSON.stringify(issues, null, 2));

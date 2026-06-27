@@ -9,6 +9,7 @@ import deployRoute from './src/routes/deploy.route.js';
 import projectRoute from './src/routes/project.route.js';
 import paymentRoute from './src/routes/payment.route.js';
 import profileRoute from './src/routes/profile.route.js';
+import imageRoute from './src/routes/image.route.js';
 import { startDeployWorker } from './src/queues/deployWorker.js';
 
 const app = express();
@@ -38,6 +39,7 @@ app.use('/api', authMiddleware, deployRoute);
 app.use('/api', authMiddleware, projectRoute);
 app.use('/api', paymentRoute); // Payment route uses its own auth (RSA signature)
 app.use('/api', authMiddleware, profileRoute);
+app.use('/api', authMiddleware, imageRoute);
 
 // Error handling
 app.use(errorMiddleware);

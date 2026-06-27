@@ -208,5 +208,33 @@ export const supabaseService = {
         if (error) throw error;
         return data;
     },
+
+    /**
+     * Uploads a wedding asset image to the public wedding-assets storage bucket.
+     * 
+     * @param {string} fileName - Name of the file.
+     * @param {Buffer} buffer - Binary file buffer.
+     * @param {string} mimeType - The mime-type, e.g. 'image/png'.
+     * @returns {Promise<Object>} The upload status and publicUrl.
+     */
+    async uploadWeddingAsset(fileName, buffer, mimeType) {
+        const { data, error } = await supabase.storage
+            .from('wedding-assets')
+            .upload(fileName, buffer, {
+                contentType: mimeType,
+                upsert: true
+            });
+
+        if (error) throw error;
+
+        const { data: publicUrlData } = supabase.storage
+            .from('wedding-assets')
+            .getPublicUrl(fileName);
+
+        return {
+            path: data.path,
+            publicUrl: publicUrlData.publicUrl
+        };
+    }
 };
 

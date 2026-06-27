@@ -153,4 +153,26 @@ export const walletService = {
 
         if (error) throw new Error(error.message);
     },
+
+    /**
+     * Updates the status of a transaction.
+     * Used to mark internal deduction transactions (e.g., 'deployment') as PAID
+     * after the related operation completes successfully.
+     * 
+     * Valid enum values in the DB: 'PENDING', 'PAID'
+     * 
+     * @param {string} transactionId - The ID of the transaction.
+     * @param {string} status - The new status value ('PENDING' | 'PAID').
+     */
+    async updateTransactionStatus(transactionId, status) {
+        const { error } = await supabase
+            .from('transactions')
+            .update({ status })
+            .eq('id', transactionId);
+
+        if (error) {
+            console.error(`[WalletService] Failed to update transaction ${transactionId} to ${status}:`, error.message);
+            throw new Error(error.message);
+        }
+    },
 };

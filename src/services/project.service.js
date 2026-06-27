@@ -62,6 +62,15 @@ export const projectService = {
             console.log(`[ProjectService] Marking project ${projectId} as deployed with slug ${slug}...`);
             await supabaseService.deployProject(projectId, slug, liveUrl);
 
+            // 5. Mark transaction as PAID after successful deployment
+            try {
+                await walletService.updateTransactionStatus(transactionId, 'PAID');
+                console.log(`[ProjectService] Transaction ${transactionId} marked as PAID.`);
+            } catch (txErr) {
+                // Non-critical: log but don't fail the deployment
+                console.error(`[ProjectService] Warning: could not update transaction status: ${txErr.message}`);
+            }
+
             return {
                 success: true,
                 projectId,
