@@ -34,10 +34,10 @@ app.get('/health', (req, res) => {
 });
 
 // Routes
+app.use('/api', paymentRoute); // Payment route (create protected inside router, webhook uses RSA)
 app.use('/api', authMiddleware, generatorRoute);
 app.use('/api', authMiddleware, deployRoute);
 app.use('/api', authMiddleware, projectRoute);
-app.use('/api', paymentRoute); // Payment route uses its own auth (RSA signature)
 app.use('/api', authMiddleware, profileRoute);
 app.use('/api', authMiddleware, imageRoute);
 

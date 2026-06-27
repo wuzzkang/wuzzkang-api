@@ -22,6 +22,8 @@ const configSchema = z.object({
     GITHUB_ORG_NAME: z.string().default('wuzzkang'),
     // Queue - has a default
     REDIS_URL: z.string().url().default('redis://localhost:6379'),
+    // Payment Configuration
+    PAYMENT_PROVIDER: z.enum(['winpay', 'dummy']).default('dummy'),
     // Winpay Configuration
     WINPAY_PARTNER_ID: z.string().optional(),
     WINPAY_BASE_URL: z.string().url().optional(),

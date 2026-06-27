@@ -9,6 +9,7 @@ const router = Router();
  * Request body schema for the /generate endpoint.
  */
 const GenerateRequestSchema = z.object({
+    projectId: z.string().uuid().optional().nullable(),
     name: z.string().min(3, 'name must be at least 3 characters').max(100, 'name must not exceed 100 characters'),
     template_type: z.enum(['store', 'wedding']).default('store'),
     prompt: z
@@ -75,7 +76,7 @@ router.post('/generate', async (req, res, next) => {
     }
 
     try {
-        const { name, prompt, template_type, wedding_details } = validation.data;
+        const { projectId, name, prompt, template_type, wedding_details } = validation.data;
         const userId = req.user.id;
 
         // Custom validation check: if template_type is wedding, wedding_details is required
@@ -88,11 +89,20 @@ router.post('/generate', async (req, res, next) => {
 
         const pageData = await generateLandingPage(prompt, template_type, wedding_details);
 
-        // Save as draft in database
-        const project = await supabaseService.saveProject(userId, {
-            name: name,
-            pageData: pageData,
-        });
+        let project;
+        if (projectId) {
+            console.log(`[GeneratorRoute] Updating existing project draft ${projectId} for user ${userId}...`);
+            project = await supabaseService.updateProject(projectId, userId, {
+                name: name,
+                pageData: pageData,
+            });
+        } else {
+            console.log(`[GeneratorRoute] Creating a new project draft for user ${userId}...`);
+            project = await supabaseService.saveProject(userId, {
+                name: name,
+                pageData: pageData,
+            });
+        }
 
         return res.status(200).json({
             success: true,

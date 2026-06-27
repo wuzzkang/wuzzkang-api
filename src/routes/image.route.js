@@ -25,12 +25,12 @@ router.post('/generate-image', async (req, res, next) => {
 
         const openai = new OpenAI({ apiKey });
 
-        console.log(`[ImageRoute] Generating DALL-E avatar with prompt: "${prompt}"...`);
+        console.log(`[ImageRoute] Generating AI avatar with prompt: "${prompt}" using gpt-image-1...`);
         const response = await openai.images.generate({
-            model: "dall-e-2", // dall-e-2 is cheaper, faster, and suitable for cartoon avatars
+            model: "gpt-image-1",
             prompt: prompt,
             n: 1,
-            size: "256x256",
+            size: "1024x1024",
         });
 
         const tempUrl = response.data[0]?.url;
@@ -45,10 +45,10 @@ router.post('/generate-image', async (req, res, next) => {
         }
         const buffer = Buffer.from(await imageRes.arrayBuffer());
 
-        // Upload to Supabase Storage in bucket 'wedding-assets'
+        // Upload to Supabase Storage in bucket 'wuzzkang-bucket'
         const ext = 'png';
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`;
-        console.log(`[ImageRoute] Uploading image buffer to Supabase wedding-assets storage as ${fileName}...`);
+        console.log(`[ImageRoute] Uploading image buffer to Supabase wuzzkang-bucket storage as ${fileName}...`);
         
         const uploadResult = await supabaseService.uploadWeddingAsset(fileName, buffer, 'image/png');
 

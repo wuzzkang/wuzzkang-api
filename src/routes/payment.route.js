@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { paymentController } from '../controllers/payment.controller.js';
 import { webhookController } from '../controllers/webhook.controller.js';
+import { authMiddleware } from '../middleware/auth.middleware.js';
 
 const router = Router();
 
@@ -8,7 +9,7 @@ const router = Router();
  * POST /api/payments/create
  * Initiates a new payment transaction.
  */
-router.post('/payments/create', paymentController.createTransaction);
+router.post('/payments/create', authMiddleware, paymentController.createTransaction);
 
 /**
  * POST /api/payment/webhook/* and /api/payments/webhook/*

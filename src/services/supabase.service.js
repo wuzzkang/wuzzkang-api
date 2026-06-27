@@ -41,6 +41,32 @@ export const supabaseService = {
     },
 
     /**
+     * Updates an existing project in the database.
+     * 
+     * @param {string} projectId - The ID of the project.
+     * @param {string} userId - The ID of the user owning the project.
+     * @param {Object} updateData - The fields to update (name, pageData, status, etc.).
+     * @returns {Promise<Object>} The updated project data.
+     */
+    async updateProject(projectId, userId, updateData) {
+        const { data, error } = await supabase
+            .from('projects')
+            .update({
+                name: updateData.name,
+                page_data: updateData.pageData,
+                status: updateData.status || 'draft',
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', projectId)
+            .eq('user_id', userId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
+
+    /**
      * Retrieves a project by ID.
      * 
      * @param {string} projectId - The ID of the project.
@@ -210,7 +236,7 @@ export const supabaseService = {
     },
 
     /**
-     * Uploads a wedding asset image to the public wedding-assets storage bucket.
+     * Uploads a wedding asset image to the public wuzzkang-bucket storage bucket.
      * 
      * @param {string} fileName - Name of the file.
      * @param {Buffer} buffer - Binary file buffer.
@@ -219,7 +245,7 @@ export const supabaseService = {
      */
     async uploadWeddingAsset(fileName, buffer, mimeType) {
         const { data, error } = await supabase.storage
-            .from('wedding-assets')
+            .from('wuzzkang-bucket')
             .upload(fileName, buffer, {
                 contentType: mimeType,
                 upsert: true
@@ -228,7 +254,7 @@ export const supabaseService = {
         if (error) throw error;
 
         const { data: publicUrlData } = supabase.storage
-            .from('wedding-assets')
+            .from('wuzzkang-bucket')
             .getPublicUrl(fileName);
 
         return {
