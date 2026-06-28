@@ -203,7 +203,7 @@ describe('ProjectService deployDraftProject Test Suite', () => {
             ).rejects.toThrow('Batas maksimal edit (3x) telah tercapai');
         });
 
-        it('should throw error if template type is not wedding', async () => {
+        it('should throw error if template type is not wedding or birthday', async () => {
             const storeProject = {
                 ...mockDeployedProject,
                 page_data: { meta: { template_type: 'store' } }
@@ -212,7 +212,7 @@ describe('ProjectService deployDraftProject Test Suite', () => {
 
             await expect(
                 projectService.editDeployedProject(userId, projectId, {})
-            ).rejects.toThrow('Hanya tipe undangan pernikahan yang diizinkan');
+            ).rejects.toThrow('Hanya tipe undangan pernikahan dan ulang tahun yang diizinkan');
         });
 
         it('should throw error if status is not deployed', async () => {

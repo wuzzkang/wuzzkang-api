@@ -75,12 +75,12 @@ describe('WinpayProvider Integration Test — createTransaction', () => {
 
         // Capture stringToSign and signature by wrapping generateSignature
         const originalGenerateSignature = winpayProvider.generateSignature.bind(winpayProvider);
-        const generateSignatureSpy = jest.spyOn(winpayProvider, 'generateSignature').mockImplementation((payload, method, url, timestamp) => {
-            const bodyHash = winpayProvider._sortObject(payload);
-            const stringToSign = `${method}:${url}:${crypto.createHash('sha256').update(JSON.stringify(bodyHash)).digest('hex').toLowerCase()}:${timestamp}`;
+        const generateSignatureSpy = jest.spyOn(winpayProvider, 'generateSignature').mockImplementation((minifiedBody, method, url, timestamp) => {
+            const bodyHash = crypto.createHash('sha256').update(minifiedBody).digest('hex').toLowerCase();
+            const stringToSign = `${method}:${url}:${bodyHash}:${timestamp}`;
 
             // We use the real implementation but log the intermediate values
-            const signature = originalGenerateSignature(payload, method, url, timestamp);
+            const signature = originalGenerateSignature(minifiedBody, method, url, timestamp);
 
             process.stdout.write(`\n[DEBUG] stringToSign: ${stringToSign}\n`);
             process.stdout.write(`[DEBUG] signature: ${signature}\n\n`);
@@ -96,7 +96,7 @@ describe('WinpayProvider Integration Test — createTransaction', () => {
             expect.objectContaining({
                 method: 'POST',
                 headers: expect.objectContaining({
-                    'X-PARTNER-ID': 'PARTNER-123',
+                    'X-PARTNER-ID': winpayProvider.config.partnerId,
                     'X-SIGNATURE': expect.any(String),
                     'X-TIMESTAMP': expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+07:00$/),
                     'CHANNEL-ID': 'WEB',
@@ -129,5 +129,106 @@ describe('WinpayProvider Integration Test — createTransaction', () => {
 
         await expect(winpayProvider.createTransaction(50000, 'user-123', 'order-456'))
             .rejects.toThrow('HTTP Error 500: Internal Server Error');
+    });
+
+    describe('verifyCallback / verifyWebhook', () => {
+        const testPayload = {
+            trxId: 'order-123',
+            amount: 50000,
+            status: 'SUCCESS',
+        };
+        const testRawBody = JSON.stringify(testPayload);
+        const testTimestamp = '2026-06-28T21:00:00+07:00';
+        const testUrl = '/api/payments/webhook';
+        const testMethod = 'POST';
+
+        // Helper to generate a valid signature for verification
+        const generateTestSignature = (bodyStr, method, path, timestamp) => {
+            const bodyHash = crypto.createHash('sha256').update(bodyStr).digest('hex').toLowerCase();
+            const stringToSign = `${method}:${path}:${bodyHash}:${timestamp}`;
+            const signer = crypto.createSign('RSA-SHA256');
+            signer.update(stringToSign);
+            return signer.sign(privateKey, 'base64');
+        };
+
+        test('should successfully verify when using rawBody matching signed content', () => {
+            const signature = generateTestSignature(testRawBody, testMethod, testUrl, testTimestamp);
+            
+            const isValid = winpayProvider.verifyCallback(
+                testPayload,
+                signature,
+                testMethod,
+                testUrl,
+                testTimestamp,
+                testRawBody
+            );
+
+            expect(isValid).toBe(true);
+        });
+
+        test('should successfully verify when rawBody has whitespaces but signature is based on rawBody', () => {
+            const prettyRawBody = JSON.stringify(testPayload, null, 2);
+            // Sign the pretty raw body
+            const signature = generateTestSignature(prettyRawBody, testMethod, testUrl, testTimestamp);
+
+            const isValid = winpayProvider.verifyCallback(
+                testPayload,
+                signature,
+                testMethod,
+                testUrl,
+                testTimestamp,
+                prettyRawBody
+            );
+
+            expect(isValid).toBe(true);
+        });
+
+        test('should fallback to Minified JSON.stringify when rawBody is not matching or missing', () => {
+            // Sign minified JSON string
+            const signature = generateTestSignature(JSON.stringify(testPayload), testMethod, testUrl, testTimestamp);
+
+            const isValid = winpayProvider.verifyCallback(
+                testPayload,
+                signature,
+                testMethod,
+                testUrl,
+                testTimestamp,
+                null // no rawBody
+            );
+
+            expect(isValid).toBe(true);
+        });
+
+        test('should fail verification if signature does not match any candidate', () => {
+            const isValid = winpayProvider.verifyCallback(
+                testPayload,
+                'invalid-signature',
+                testMethod,
+                testUrl,
+                testTimestamp,
+                testRawBody
+            );
+
+            expect(isValid).toBe(false);
+        });
+
+        test('should bypass verification if BYPASS_PAYMENT_SIGNATURE is "true"', () => {
+            const oldBypass = process.env.BYPASS_PAYMENT_SIGNATURE;
+            process.env.BYPASS_PAYMENT_SIGNATURE = 'true';
+
+            const isValid = winpayProvider.verifyWebhook(
+                testPayload,
+                'any-bad-signature',
+                testMethod,
+                testUrl,
+                testTimestamp,
+                testRawBody
+            );
+
+            expect(isValid).toBe(true);
+
+            // Restore
+            process.env.BYPASS_PAYMENT_SIGNATURE = oldBypass;
+        });
     });
 });

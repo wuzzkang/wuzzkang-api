@@ -26,7 +26,7 @@ app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json({
     verify: (req, res, buf) => {
-        req.rawBody = buf.toString();
+        req.rawBody = buf.toString('utf8');
     }
 }));
 

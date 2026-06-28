@@ -32,7 +32,14 @@ export const webhookController = {
         try {
             // 1. Verify Signature
             const provider = await PaymentFactory.getProvider();
-            const isValid = provider.verifyWebhook(payload, signature, req.method, req.originalUrl, timestamp, req.rawBody);
+            const isValid = provider.verifyWebhook(
+                payload,
+                signature,
+                req.method,
+                '/v1.0/transfer-va/payment', // path yang digunakan Winpay saat generate signature
+                timestamp,
+                req.rawBody
+            );
 
             if (!isValid) {
                 console.error(`[WebhookController] Invalid signature for order ${payload.trxId}`);

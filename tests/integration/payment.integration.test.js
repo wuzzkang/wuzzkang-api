@@ -33,6 +33,9 @@ jest.unstable_mockModule('../../src/queues/deployWorker.js', () => ({
     }),
 }));
 
+// Force payment provider to dummy for E2E tests
+process.env.PAYMENT_PROVIDER = 'dummy';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 2. Dynamic imports (after mocking is set up)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -114,6 +117,25 @@ describe('Payment Webhook — E2E Integration Test', () => {
         const initialBalance = await walletService.getBalance(dummyUserId);
         console.log(`\n[Test] Initial balance : Rp ${initialBalance.toLocaleString('id-ID')}`);
 
+        // ── Step 1.5: Insert pending transaction in DB ────────────────────
+        console.log('[Test] Creating pending transaction in Supabase...');
+        const { error: txError } = await supabaseAdmin
+            .from('transactions')
+            .insert([{
+                user_id: dummyUserId,
+                amount: testAmount,
+                type: 'topup',
+                status: 'PENDING',
+                order_id: testOrderId,
+                description: 'Test E2E top-up',
+            }]);
+
+        if (txError) {
+            console.error('[Test] ❌ Failed to create pending transaction:', txError.message);
+            throw txError;
+        }
+        console.log('[Test] ✅ Pending transaction created in DB.');
+
         // ── Step 2: POST to /api/payments/webhook ─────────────────────
         console.log(`[Test] POSTing webhook to ${API_URL}...`);
         const response = await fetch(API_URL, {
@@ -127,7 +149,8 @@ describe('Payment Webhook — E2E Integration Test', () => {
             body: JSON.stringify({
                 userId: dummyUserId,
                 amount: testAmount,
-                orderId: testOrderId,
+                trxId: testOrderId,
+                responseCode: '2000000',
             }),
         });
 
@@ -159,7 +182,8 @@ describe('Payment Webhook — E2E Integration Test', () => {
             body: JSON.stringify({
                 userId: dummyUserId,
                 amount: testAmount,
-                orderId: testOrderId,
+                trxId: testOrderId,
+                responseCode: '2000000',
             }),
         });
 

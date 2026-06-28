@@ -48,6 +48,15 @@ export class WinpayProvider extends PaymentGatewayInterface {
      * Verifies the signature of an inbound callback from Winpay.
      */
     verifyCallback(payload, signature, method, url, timestamp, rawBody = null) {
+        console.log('[WinpayProvider] verifyCallback called with:', {
+            method,
+            url,
+            timestamp,
+            signaturePreview: signature ? signature.substring(0, 40) + '...' : 'MISSING',
+            rawBodyAvailable: !!rawBody,
+            rawBodyPreview: rawBody ? rawBody.substring(0, 100) : null,
+        });
+
         this.lastVerificationError = null;
 
         if (!signature) {
@@ -58,20 +67,23 @@ export class WinpayProvider extends PaymentGatewayInterface {
 
         // Prepare extensive list of candidate paths
         const pathsSet = new Set([url, url.split('?')[0]]);
-        
-        // Extract SNAP path portion (starts with /v1.0/)
+
+        // Add official Winpay SNAP payment callback path (from documentation)
+        pathsSet.add('/v1.0/transfer-va/payment');
+
+        // Extract SNAP path portion (starts with /v1.0/) from url parameter
         const snapPathMatch = url.match(/\/v1\.0\/.*/);
         if (snapPathMatch) {
             pathsSet.add(snapPathMatch[0]);
             pathsSet.add(snapPathMatch[0].split('?')[0]);
         }
 
-        // Add relative paths without /api
+        // Add relative paths without /api prefix
         if (url.startsWith('/api')) {
             const relativePath = url.substring(4);
             pathsSet.add(relativePath);
             pathsSet.add(relativePath.split('?')[0]);
-            
+
             // Also try relative SNAP path
             const relativeSnapMatch = relativePath.match(/\/v1\.0\/.*/);
             if (relativeSnapMatch) {
@@ -79,29 +91,23 @@ export class WinpayProvider extends PaymentGatewayInterface {
             }
         }
 
-        // Add base webhook paths that might be configured in the portal
-        pathsSet.add('/api/payment/webhook');
-        pathsSet.add('/api/payments/webhook');
-        pathsSet.add('/payment/webhook');
-        pathsSet.add('/payments/webhook');
-
         const paths = Array.from(pathsSet).filter(p => p);
 
         // Prepare candidate bodies
         const bodies = [];
-        
-        // Candidate 1: standard minified JSON from parsed body
-        bodies.push({ name: 'Minified (JSON.stringify)', val: JSON.stringify(payload) });
-        
-        // Candidate 2: alphabetically sorted JSON
-        bodies.push({ name: 'Sorted Minified (JSON.stringify + sortObject)', val: JSON.stringify(sortObject(payload)) });
 
-        // Candidate 3: raw body as-is (if available)
+        // Prioritas 1: raw body persis seperti yang diterima (paling akurat)
+        // Winpay hanya melakukan minify, tidak sorting — raw body adalah kandidat terbaik
         if (rawBody) {
             bodies.push({ name: 'Raw Body As-Is', val: rawBody });
-            // Candidate 4: fully stripped of all whitespace
-            bodies.push({ name: 'Raw Body Stripped of Whitespace', val: rawBody.replace(/\s+/g, '') });
+            bodies.push({ name: 'Raw Body Stripped Whitespace', val: rawBody.replace(/\s+/g, '') });
         }
+
+        // Prioritas 2: JSON.stringify biasa tanpa sorting (sesuai docs Winpay)
+        bodies.push({ name: 'Minified JSON.stringify', val: JSON.stringify(payload) });
+
+        // Prioritas 3: sorted — hanya sebagai fallback terakhir
+        bodies.push({ name: 'Sorted Minified', val: JSON.stringify(sortObject(payload)) });
 
         console.log(`[WinpayProvider] Signature verification attempt for ${method} ${url}.`);
         console.log(` - Loaded Public Key Content:\n${this.winpayPublicKey || '(empty)'}`);
@@ -114,7 +120,7 @@ export class WinpayProvider extends PaymentGatewayInterface {
                     .createHash('sha256')
                     .update(bodyCandidate.val)
                     .digest('hex')
-                    .toLowerCase();
+                    .toLowerCase(); // WAJIB lowercase sesuai dokumentasi Winpay
 
                 const stringToSign = `${method}:${pathCandidate}:${bodyHash}:${timestamp}`;
                 
@@ -128,9 +134,9 @@ export class WinpayProvider extends PaymentGatewayInterface {
                     const isValid = verifier.verify(this.winpayPublicKey, signature, 'base64');
 
                     if (isValid) {
-                        console.log(`[WinpayProvider] Signature verification SUCCESS!`);
-                        console.log(` - Succeeded using Path: "${pathCandidate}"`);
-                        console.log(` - Succeeded using Body type: "${bodyCandidate.name}"`);
+                        console.log(`[WinpayProvider] ✅ Signature VALID`);
+                        console.log(` - Path: "${pathCandidate}"`);
+                        console.log(` - Body type: "${bodyCandidate.name}"`);
                         console.log(` - stringToSign: "${stringToSign}"`);
                         return true;
                     }
