@@ -11,6 +11,7 @@ import paymentRoute from './src/routes/payment.route.js';
 import profileRoute from './src/routes/profile.route.js';
 import imageRoute from './src/routes/image.route.js';
 import productRoute from './src/routes/product.route.js';
+import couponRoute from './src/routes/coupon.route.js';
 import { startDeployWorker } from './src/queues/deployWorker.js';
 
 const app = express();
@@ -42,6 +43,7 @@ app.use('/api', authMiddleware, projectRoute);
 app.use('/api', authMiddleware, profileRoute);
 app.use('/api', authMiddleware, imageRoute);
 app.use('/api', authMiddleware, productRoute);
+app.use('/api', authMiddleware, couponRoute);
 
 // Error handling
 app.use(errorMiddleware);

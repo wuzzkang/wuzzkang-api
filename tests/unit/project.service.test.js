@@ -4,18 +4,19 @@ import { jest } from '@jest/globals';
 const mockWalletService = {
     deductBalance: jest.fn(),
     addTransaction: jest.fn(),
-};
-
-const mockAiService = {
-    generateLandingPage: jest.fn(),
+    updateTransactionStatus: jest.fn(),
 };
 
 const mockSupabaseService = {
-    saveProject: jest.fn(),
+    getProject: jest.fn(),
+    getProjectBySlug: jest.fn(),
+    getProduct: jest.fn(),
+    deployProject: jest.fn(),
 };
 
-const mockQueue = {
-    add: jest.fn(),
+const mockCouponService = {
+    validateCoupon: jest.fn(),
+    recordUsage: jest.fn(),
 };
 
 // 2. Setup ESM Mocking
@@ -23,121 +24,139 @@ jest.unstable_mockModule('../../src/services/wallet.service.js', () => ({
     walletService: mockWalletService,
 }));
 
-jest.unstable_mockModule('../../src/services/ai.service.js', () => ({
-    aiService: mockAiService,
-}));
-
 jest.unstable_mockModule('../../src/services/supabase.service.js', () => ({
     supabaseService: mockSupabaseService,
 }));
 
-jest.unstable_mockModule('../../src/queues/queue.js', () => ({
-    getDeploymentQueue: jest.fn(() => mockQueue),
+jest.unstable_mockModule('../../src/services/coupon.service.js', () => ({
+    couponService: mockCouponService,
 }));
 
 // 3. Import ProjectService after mocking
 const { projectService } = await import('../../src/services/project.service.js');
 
-describe('ProjectService Orchestration Integration Test', () => {
+describe('ProjectService deployDraftProject Test Suite', () => {
     const userId = 'user-123';
-    const projectName = 'Test Project';
-    const prompt = 'A cool landing page';
-    const repoName = 'test-repo';
-    const GENERATION_COST = 10000;
+    const projectId = 'project-123';
+    const slug = 'pernikahan-zubair';
+    const dynamicCost = 10000;
+
+    const mockProjectData = {
+        id: projectId,
+        user_id: userId,
+        name: 'Zubair & Nadin',
+        status: 'draft',
+        page_data: {
+            meta: {
+                template_type: 'wedding'
+            }
+        }
+    };
+
+    const mockProductData = {
+        id: 'wedding',
+        name: 'Undangan Pernikahan',
+        is_active: true,
+        cost: dynamicCost
+    };
 
     beforeEach(() => {
         jest.clearAllMocks();
+        // Setup default path mocks
+        mockSupabaseService.getProject.mockResolvedValue(mockProjectData);
+        mockSupabaseService.getProjectBySlug.mockResolvedValue(null);
+        mockSupabaseService.getProduct.mockResolvedValue(mockProductData);
+        mockSupabaseService.deployProject.mockResolvedValue({ success: true });
+        mockWalletService.deductBalance.mockResolvedValue({ newBalance: 40000, transactionId: 'tx-123' });
+        mockWalletService.updateTransactionStatus.mockResolvedValue(true);
     });
 
-    describe('createProject', () => {
-        it('should successfully create a project and deduct balance without refund', async () => {
-            // Setup Success Mocks
-            mockWalletService.deductBalance.mockResolvedValue(40000);
-            mockAiService.generateLandingPage.mockResolvedValue({ title: 'Success' });
-            mockSupabaseService.saveProject.mockResolvedValue({ id: 'project-123' });
-            mockQueue.add.mockResolvedValue({ id: 'job-123' });
+    it('should successfully deploy project with full price when no coupon is applied', async () => {
+        const result = await projectService.deployDraftProject(userId, projectId, slug, null);
 
-            const result = await projectService.createProject(userId, projectName, prompt, repoName);
+        expect(result.success).toBe(true);
+        expect(result.liveUrl).toContain(slug);
 
-            // Assertions
-            expect(result.success).toBe(true);
-            expect(result.projectId).toBe('project-123');
+        // Deducts full cost
+        expect(mockWalletService.deductBalance).toHaveBeenCalledWith(
+            userId,
+            dynamicCost,
+            'deployment',
+            projectId,
+            expect.stringContaining('Zubair & Nadin')
+        );
+        expect(mockWalletService.updateTransactionStatus).toHaveBeenCalledWith('tx-123', 'PAID');
+        expect(mockCouponService.validateCoupon).not.toHaveBeenCalled();
+    });
 
-            // Verify balance deduction
-            expect(mockWalletService.deductBalance).toHaveBeenCalledWith(
-                userId,
-                GENERATION_COST,
-                'generation',
-                null,
-                expect.stringContaining(projectName)
-            );
+    it('should successfully apply coupon with 50% discount and deduct remaining balance', async () => {
+        const mockCoupon = {
+            id: 'coupon-abc',
+            code: 'DISKON50',
+            discount_type: 'percentage',
+            discount_value: 50
+        };
+        mockCouponService.validateCoupon.mockResolvedValue(mockCoupon);
 
-            // Verify execution steps
-            expect(mockAiService.generateLandingPage).toHaveBeenCalledWith(prompt);
-            expect(mockSupabaseService.saveProject).toHaveBeenCalled();
-            expect(mockQueue.add).toHaveBeenCalled();
+        const result = await projectService.deployDraftProject(userId, projectId, slug, 'DISKON50');
 
-            // Verify NO refund was issued
-            expect(mockWalletService.addTransaction).not.toHaveBeenCalled();
-        });
+        expect(result.success).toBe(true);
 
-        it('should refund balance if AI generation fails', async () => {
-            // Setup Failure Mocks
-            mockWalletService.deductBalance.mockResolvedValue(40000);
-            mockAiService.generateLandingPage.mockRejectedValue(new Error('AI_FAILURE'));
-            mockWalletService.addTransaction.mockResolvedValue(50000);
+        // Deducts 50% of the cost (5000)
+        expect(mockWalletService.deductBalance).toHaveBeenCalledWith(
+            userId,
+            5000,
+            'deployment',
+            projectId,
+            expect.stringContaining('DISKON50')
+        );
+        expect(mockCouponService.recordUsage).toHaveBeenCalledWith('coupon-abc', userId);
+    });
 
-            // Execute and expect error
-            await expect(
-                projectService.createProject(userId, projectName, prompt, repoName)
-            ).rejects.toThrow('AI_FAILURE');
+    it('should bypass balance deduction when 100% discount coupon is applied', async () => {
+        const mockCoupon = {
+            id: 'coupon-free',
+            code: 'DISKON100',
+            discount_type: 'percentage',
+            discount_value: 100
+        };
+        mockCouponService.validateCoupon.mockResolvedValue(mockCoupon);
+        mockWalletService.addTransaction.mockResolvedValue(50000); // For free tx log
 
-            // Assertions
-            expect(mockWalletService.deductBalance).toHaveBeenCalled();
+        const result = await projectService.deployDraftProject(userId, projectId, slug, 'DISKON100');
 
-            // Verify refund was issued
-            expect(mockWalletService.addTransaction).toHaveBeenCalledWith(
-                userId,
-                GENERATION_COST,
-                'refund',
-                expect.stringContaining(projectName)
-            );
-        });
+        expect(result.success).toBe(true);
 
-        it('should refund balance if saving to database fails', async () => {
-            // Setup Failure Mocks
-            mockWalletService.deductBalance.mockResolvedValue(40000);
-            mockAiService.generateLandingPage.mockResolvedValue({ title: 'Success' });
-            mockSupabaseService.saveProject.mockRejectedValue(new Error('DB_FAILURE'));
-            mockWalletService.addTransaction.mockResolvedValue(50000);
+        // Balance deduction is bypassed (deductBalance is not called)
+        expect(mockWalletService.deductBalance).not.toHaveBeenCalled();
+        // A Rp 0 transaction log is recorded instead
+        expect(mockWalletService.addTransaction).toHaveBeenCalledWith(
+            userId,
+            0,
+            'deployment',
+            expect.stringContaining('DISKON100'),
+            projectId
+        );
+        expect(mockCouponService.recordUsage).toHaveBeenCalledWith('coupon-free', userId);
+    });
 
-            // Execute and expect error
-            await expect(
-                projectService.createProject(userId, projectName, prompt, repoName)
-            ).rejects.toThrow('DB_FAILURE');
+    it('should refund deducted balance if direct deployment fails', async () => {
+        // Mock deploy function to throw an error
+        mockSupabaseService.deployProject.mockRejectedValue(new Error('DEPLOY_ERROR'));
+        mockWalletService.addTransaction.mockResolvedValue(50000); // For refund
 
-            // Verify refund was issued
-            expect(mockWalletService.addTransaction).toHaveBeenCalledWith(
-                userId,
-                GENERATION_COST,
-                'refund',
-                expect.stringContaining(projectName)
-            );
-        });
+        await expect(
+            projectService.deployDraftProject(userId, projectId, slug, null)
+        ).rejects.toThrow('DEPLOY_ERROR');
 
-        it('should still re-throw original error even if refund fails', async () => {
-            // Setup Failure Mocks
-            mockWalletService.deductBalance.mockResolvedValue(40000);
-            mockAiService.generateLandingPage.mockRejectedValue(new Error('ORIGINAL_ERROR'));
-            mockWalletService.addTransaction.mockRejectedValue(new Error('REFUND_ERROR'));
-
-            // Execute and expect ORIGINAL error
-            await expect(
-                projectService.createProject(userId, projectName, prompt, repoName)
-            ).rejects.toThrow('ORIGINAL_ERROR');
-
-            // Verify refund was attempted
-            expect(mockWalletService.addTransaction).toHaveBeenCalled();
-        });
+        // Deduct was called
+        expect(mockWalletService.deductBalance).toHaveBeenCalled();
+        // Refund was issued for full amount
+        expect(mockWalletService.addTransaction).toHaveBeenCalledWith(
+            userId,
+            dynamicCost,
+            'refund',
+            expect.stringContaining('Refund')
+        );
     });
 });

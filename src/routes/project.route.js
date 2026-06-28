@@ -14,6 +14,7 @@ const DeployProjectSchema = z.object({
         .min(3)
         .max(50)
         .regex(/^[a-zA-Z0-9_-]+$/, 'Slug hanya boleh mengandung huruf, angka, strip (-), atau underscore (_)'),
+    couponCode: z.string().optional().nullable(),
 });
 
 /**
@@ -31,9 +32,9 @@ router.post('/projects/:id/deploy', async (req, res, next) => {
     }
 
     try {
-        const { slug } = validation.data;
+        const { slug, couponCode } = validation.data;
         const userId = req.user.id;
-        const result = await projectService.deployDraftProject(userId, id, slug);
+        const result = await projectService.deployDraftProject(userId, id, slug, couponCode);
 
         return res.status(200).json(result);
     } catch (err) {

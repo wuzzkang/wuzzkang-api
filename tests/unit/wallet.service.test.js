@@ -51,11 +51,12 @@ describe('WalletService', () => {
 
     describe('deductBalance', () => {
         it('should deduct balance successfully (Happy Path)', async () => {
-            mockSupabase.rpc.mockResolvedValueOnce({ data: 40000, error: null });
+            mockSupabase.rpc.mockResolvedValueOnce({ data: { new_balance: 40000, transaction_id: 'tx-123' }, error: null });
 
-            const newBalance = await walletService.deductBalance(userId, 10000, 'generation', '00000000-0000-0000-0000-000000000001', 'Test deduction');
+            const result = await walletService.deductBalance(userId, 10000, 'generation', '00000000-0000-0000-0000-000000000001', 'Test deduction');
 
-            expect(newBalance).toBe(40000);
+            expect(result.newBalance).toBe(40000);
+            expect(result.transactionId).toBe('tx-123');
             expect(mockSupabase.rpc).toHaveBeenCalledWith('deduct_user_balance', {
                 p_user_id: userId,
                 p_amount: 10000,

@@ -4,6 +4,7 @@ import { walletService } from './wallet.service.js';
 import { getDeploymentQueue } from '../queues/queue.js';
 import { githubService } from './github.service.js';
 import { config } from '../config/index.js';
+import { couponService } from './coupon.service.js';
 
 /**
  * Orchestrator service for project-related operations.
@@ -15,9 +16,10 @@ export const projectService = {
      * @param {string} userId - The ID of the user.
      * @param {string} projectId - The ID of the draft project.
      * @param {string} slug - The target slug for the landing page.
+     * @param {string|null} couponCode - Optional coupon code for discounts.
      */
-    async deployDraftProject(userId, projectId, slug) {
-        console.log(`[ProjectService] Starting deployment for draft project ${projectId} by user ${userId}...`);
+    async deployDraftProject(userId, projectId, slug, couponCode = null) {
+        console.log(`[ProjectService] Starting deployment for draft project ${projectId} by user ${userId} (Kupon: ${couponCode || 'tidak ada'})...`);
 
         // 1. Verify project
         const project = await supabaseService.getProject(projectId);
@@ -28,8 +30,6 @@ export const projectService = {
         }
 
         // 2. Generate a globally unique final slug by appending a short random suffix.
-        // This allows different users to have the same "base" slug (e.g. "pernikahan-bambang")
-        // without conflict, since the final slug will differ (e.g. "pernikahan-bambang-x7k2").
         const generateFinalSlug = async (baseSlug, attempts = 0) => {
             if (attempts >= 5) {
                 throw new Error('Gagal membuat slug unik setelah beberapa percobaan. Silakan coba lagi.');
@@ -38,7 +38,6 @@ export const projectService = {
             const candidate = `${baseSlug}-${suffix}`;
             const existing = await supabaseService.getProjectBySlug(candidate);
             if (existing) {
-                // Very rare collision — retry with a new suffix
                 return generateFinalSlug(baseSlug, attempts + 1);
             }
             return candidate;
@@ -68,24 +67,56 @@ export const projectService = {
         }
 
         const dynamicCost = product.cost ?? 10000;
+        let finalCost = dynamicCost;
+        let couponInfo = null;
+
+        // Validate and apply coupon if provided
+        if (couponCode && typeof couponCode === 'string' && couponCode.trim()) {
+            console.log(`[ProjectService] Applying coupon: '${couponCode}'`);
+            couponInfo = await couponService.validateCoupon(couponCode, userId);
+            
+            if (couponInfo.discount_type === 'percentage') {
+                const discount = Math.round((dynamicCost * couponInfo.discount_value) / 100);
+                finalCost = Math.max(0, dynamicCost - discount);
+            } else if (couponInfo.discount_type === 'fixed_amount') {
+                finalCost = Math.max(0, dynamicCost - couponInfo.discount_value);
+            }
+            console.log(`[ProjectService] Coupon applied. Original cost: ${dynamicCost}, Discount: ${dynamicCost - finalCost}, Final cost: ${finalCost}`);
+        }
 
         // 3. Deduct balance first (Fail fast if insufficient funds)
         let transactionId;
-        try {
-            const deduction = await walletService.deductBalance(
-                userId,
-                dynamicCost,
-                'deployment',
-                projectId,
-                `Deployment cost for project: ${project.name}`
-            );
-            transactionId = deduction.transactionId;
-            console.log(`[ProjectService] Balance deducted: ${dynamicCost}, Transaction ID: ${transactionId}`);
-        } catch (error) {
-            if (error.message === 'INSUFFICIENT_FUNDS') {
-                throw new Error(`Saldo tidak cukup untuk mendeploy proyek. Biaya: Rp ${dynamicCost.toLocaleString('id-ID')}`);
+        if (finalCost > 0) {
+            try {
+                const deduction = await walletService.deductBalance(
+                    userId,
+                    finalCost,
+                    'deployment',
+                    projectId,
+                    `Deployment cost for project: ${project.name}${couponInfo ? ` (Kupon: ${couponInfo.code})` : ''}`
+                );
+                transactionId = deduction.transactionId;
+                console.log(`[ProjectService] Balance deducted: ${finalCost}, Transaction ID: ${transactionId}`);
+            } catch (error) {
+                if (error.message === 'INSUFFICIENT_FUNDS') {
+                    throw new Error(`Saldo tidak cukup untuk mendeploy proyek. Biaya: Rp ${finalCost.toLocaleString('id-ID')}`);
+                }
+                throw error;
             }
-            throw error;
+        } else {
+            console.log('[ProjectService] Final cost is 0 (100% discounted). Bypassing balance deduction.');
+            try {
+                const freeTx = await walletService.addTransaction(
+                    userId,
+                    0,
+                    'deployment',
+                    `Free deployment (Kupon: ${couponInfo?.code}) for project: ${project.name}`,
+                    projectId
+                );
+                transactionId = freeTx.id;
+            } catch (freeErr) {
+                console.error('[ProjectService] Failed to record free transaction log:', freeErr.message);
+            }
         }
 
         try {
@@ -97,12 +128,23 @@ export const projectService = {
             await supabaseService.deployProject(projectId, finalSlug, liveUrl);
 
             // 5. Mark transaction as PAID after successful deployment
-            try {
-                await walletService.updateTransactionStatus(transactionId, 'PAID');
-                console.log(`[ProjectService] Transaction ${transactionId} marked as PAID.`);
-            } catch (txErr) {
-                // Non-critical: log but don't fail the deployment
-                console.error(`[ProjectService] Warning: could not update transaction status: ${txErr.message}`);
+            if (finalCost > 0 && transactionId) {
+                try {
+                    await walletService.updateTransactionStatus(transactionId, 'PAID');
+                    console.log(`[ProjectService] Transaction ${transactionId} marked as PAID.`);
+                } catch (txErr) {
+                    console.error(`[ProjectService] Warning: could not update transaction status: ${txErr.message}`);
+                }
+            }
+
+            // 6. Record coupon usage if applied
+            if (couponInfo) {
+                try {
+                    await couponService.recordUsage(couponInfo.id, userId);
+                    console.log(`[ProjectService] Coupon usage recorded for coupon ID ${couponInfo.id}, User ID ${userId}`);
+                } catch (couponErr) {
+                    console.error(`[ProjectService] Failed to record coupon usage: ${couponErr.message}`);
+                }
             }
 
             return {
@@ -116,17 +158,19 @@ export const projectService = {
             console.error(`[ProjectService] Error during direct deployment: ${error.message}`);
 
             // Rollback: Refund balance if execution fails
-            try {
-                console.log(`[ProjectService] Attempting to refund ${dynamicCost} credits to user ${userId}...`);
-                await walletService.addTransaction(
-                    userId,
-                    dynamicCost,
-                    'refund',
-                    `Refund for failed deployment: ${project.name}`
-                );
-                console.log(`[ProjectService] Refund successful.`);
-            } catch (refundError) {
-                console.error(`[ProjectService] CRITICAL: Refund failed for user ${userId}: ${refundError.message}`);
+            if (finalCost > 0) {
+                try {
+                    console.log(`[ProjectService] Attempting to refund ${finalCost} credits to user ${userId}...`);
+                    await walletService.addTransaction(
+                        userId,
+                        finalCost,
+                        'refund',
+                        `Refund for failed deployment: ${project.name}`
+                    );
+                    console.log(`[ProjectService] Refund successful.`);
+                } catch (refundError) {
+                    console.error(`[ProjectService] CRITICAL: Refund failed for user ${userId}: ${refundError.message}`);
+                }
             }
 
             // Re-throw original error
