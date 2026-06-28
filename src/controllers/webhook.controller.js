@@ -14,10 +14,20 @@ export const webhookController = {
      */
     async handleWinpayWebhook(req, res) {
         const payload = req.body;
-        const signature = req.headers['x-signature'];
-        const timestamp = req.headers['x-timestamp'];
+        const signature = req.headers['x-signature'] || req.headers['signature'];
+        const timestamp = req.headers['x-timestamp'] || req.headers['timestamp'];
 
-        console.log(`[WebhookController] Received webhook for order ${payload.trxId}`);
+        console.log(`\n=== 📥 WINPAY WEBHOOK INBOUND CALLBACK DEBUG ===`);
+        console.log(`[WebhookController] Original URL: ${req.originalUrl}`);
+        console.log(`[WebhookController] Method: ${req.method}`);
+        console.log(`[WebhookController] Headers:\n`, JSON.stringify(req.headers, null, 2));
+        console.log(`[WebhookController] Body Payload:\n`, JSON.stringify(payload, null, 2));
+        console.log(`[WebhookController] Raw Body:\n`, req.rawBody || '(Raw body is empty)');
+        console.log(`[WebhookController] Extracted Signature: "${signature}"`);
+        console.log(`[WebhookController] Extracted Timestamp: "${timestamp}"`);
+        console.log(`================================================\n`);
+
+        console.log(`[WebhookController] Received webhook for order ${payload.trxId || payload.orderId || 'unknown'}`);
 
         try {
             // 1. Verify Signature

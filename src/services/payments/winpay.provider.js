@@ -103,7 +103,9 @@ export class WinpayProvider extends PaymentGatewayInterface {
             bodies.push({ name: 'Raw Body Stripped of Whitespace', val: rawBody.replace(/\s+/g, '') });
         }
 
-        console.log(`[WinpayProvider] Signature verification attempt for ${method} ${url}. Trying combinations...`);
+        console.log(`[WinpayProvider] Signature verification attempt for ${method} ${url}.`);
+        console.log(` - Loaded Public Key Content:\n${this.winpayPublicKey || '(empty)'}`);
+        console.log(` - Received Signature: "${signature ? signature.substring(0, 30) + '...' : 'empty'}"`);
 
         // Try verifying all combinations of paths and bodies
         for (const pathCandidate of paths) {
@@ -116,6 +118,10 @@ export class WinpayProvider extends PaymentGatewayInterface {
 
                 const stringToSign = `${method}:${pathCandidate}:${bodyHash}:${timestamp}`;
                 
+                console.log(` -> Candidate Path: "${pathCandidate}" | Body: "${bodyCandidate.name}"`);
+                console.log(`    └─ stringToSign: "${stringToSign}"`);
+                console.log(`    └─ bodyHash: "${bodyHash}"`);
+
                 try {
                     const verifier = crypto.createVerify('RSA-SHA256');
                     verifier.update(stringToSign);
@@ -214,15 +220,19 @@ export class WinpayProvider extends PaymentGatewayInterface {
                 body: minifiedBody,
             });
 
+            console.log(`[WinpayProvider] Received response from Winpay: Status ${response.status}`);
+
             if (!response.ok) {
                 const errorText = await response.text();
+                console.error(`[WinpayProvider] Winpay response error content:`, errorText);
                 throw new Error(`HTTP Error ${response.status}: ${errorText}`);
             }
 
             const result = await response.json();
+            console.log(`[WinpayProvider] Winpay response JSON:`, JSON.stringify(result, null, 2));
 
-            if (!result.responseCode.startsWith('200')) {
-                throw new Error(`Winpay Error: ${result.responseCode} - ${result.responseMessage}`);
+            if (!result.responseCode || !result.responseCode.startsWith('200')) {
+                throw new Error(`Winpay Error: ${result.responseCode || 'Unknown Code'} - ${result.responseMessage || 'No message'}`);
             }
 
             return {
@@ -256,12 +266,17 @@ export class WinpayProvider extends PaymentGatewayInterface {
                 body: minifiedBody,
             });
 
+            console.log(`[WinpayProvider] Inquiry Status Response Status: ${response.status}`);
+
             if (!response.ok) {
                 const errorText = await response.text();
+                console.error(`[WinpayProvider] Inquiry Status Error content:`, errorText);
                 throw new Error(`HTTP Error ${response.status}: ${errorText}`);
             }
 
-            return await response.json();
+            const result = await response.json();
+            console.log(`[WinpayProvider] Inquiry Status Response JSON:`, JSON.stringify(result, null, 2));
+            return result;
         } catch (error) {
             throw error;
         }
