@@ -78,17 +78,34 @@ Rules:
 - Choose the theme that matches the user's color or stylistic request. If none matches, default to "classic-gold".
 - Output ONLY the raw JSON object.`;
 
+const BIRTHDAY_SYSTEM_PROMPT = `You are a creative copywriter and UI theme designer for Siluet birthday invitations.
+
+Your task is to output a SINGLE valid JSON object based on the user's prompt (which describes theme/color preferences or quotes).
+Do not include any markdown, code blocks, or extra text.
+
+The JSON object MUST strictly follow this structure:
+{
+  "theme": "cute-balloon | elegant-gold",
+  "quote": "string (a beautiful birthday wishes/prayer or quote, 30-250 characters)"
+}
+
+Rules:
+- Keep the quote concise, warm, and appropriate for the celebrant.
+- Choose the theme that matches the user's color or stylistic request. If none matches, default to "cute-balloon".
+- Output ONLY the raw JSON object.`;
+
 /**
  * Generates a complete landing page JSON object using the Sumopod AI API.
  * The response is validated against the PageSchema before being returned.
  *
  * @param {string} prompt - The user-provided description or niche for the landing page.
- * @param {string} [templateType='store'] - The type of template: 'store' or 'wedding'.
- * @param {object} [weddingDetails=null] - Pre-structured wedding info (names, dates, locations) to merge with AI output.
+ * @param {string} [templateType='store'] - The type of template: 'store', 'wedding', or 'birthday'.
+ * @param {object} [weddingDetails=null] - Pre-structured wedding info to merge with AI output.
+ * @param {object} [birthdayDetails=null] - Pre-structured birthday info to merge with AI output.
  * @returns {Promise<import('../utils/schema.js').PageSchema>} Validated landing page data.
  * @throws {Error} If the API call fails, JSON parsing fails, or schema validation fails.
  */
-export async function generateLandingPage(prompt, templateType = 'store', weddingDetails = null) {
+export async function generateLandingPage(prompt, templateType = 'store', weddingDetails = null, birthdayDetails = null) {
   const client = getAIClient();
   let rawContent;
 
@@ -126,11 +143,54 @@ export async function generateLandingPage(prompt, templateType = 'store', weddin
     }
   }
 
+  if (templateType === 'birthday') {
+    if (!birthdayDetails) {
+      throw new Error('birthdayDetails is required for birthday template type.');
+    }
+
+    // Bypass LLM completely if prompt is empty
+    if (!prompt || !prompt.trim()) {
+      const designKey = birthdayDetails.design_key || 'cute-balloon';
+      const theme = birthdayDetails.theme || designKey;
+      const finalData = {
+        meta: {
+          title: `Undangan Ulang Tahun ${birthdayDetails.celebrant?.nickname || 'Celebrant'}`,
+          theme: theme,
+          template_type: 'birthday',
+          design_key: designKey,
+        },
+        content: {
+          ...birthdayDetails,
+          quote: birthdayDetails.quote || 'Selamat hari lahir! Semoga panjang umur, sehat selalu, dan dilimpahi kebahagiaan serta kesuksesan di tahun-tahun mendatang.',
+        },
+      };
+
+      const validation = PageSchema.safeParse(finalData);
+      if (!validation.success) {
+        const issues = validation.error.flatten();
+        console.error('[ai.service] PageSchema validation failed (no-prompt-birthday):', JSON.stringify(issues, null, 2));
+        throw new Error(
+          `AI output failed schema validation: ${JSON.stringify(issues.fieldErrors)}`
+        );
+      }
+      return validation.data;
+    }
+  }
+
   try {
-    const activeSystemPrompt = templateType === 'wedding' ? WEDDING_SYSTEM_PROMPT : SYSTEM_PROMPT;
-    const userPrompt = templateType === 'wedding'
-      ? `Generate wedding theme and quote for preference: ${prompt}`
-      : `Generate a landing page for: ${prompt}`;
+    let activeSystemPrompt = SYSTEM_PROMPT;
+    if (templateType === 'wedding') {
+      activeSystemPrompt = WEDDING_SYSTEM_PROMPT;
+    } else if (templateType === 'birthday') {
+      activeSystemPrompt = BIRTHDAY_SYSTEM_PROMPT;
+    }
+
+    let userPrompt = `Generate a landing page for: ${prompt}`;
+    if (templateType === 'wedding') {
+      userPrompt = `Generate wedding theme and quote for preference: ${prompt}`;
+    } else if (templateType === 'birthday') {
+      userPrompt = `Generate birthday theme and quote for preference: ${prompt}`;
+    }
 
     const completion = await client.chat.completions.create({
       model: config.AI_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'meta-llama/llama-4-maverick:free',
@@ -173,6 +233,20 @@ export async function generateLandingPage(prompt, templateType = 'store', weddin
       content: {
         ...weddingDetails,
         quote: parsed.quote || 'Semoga menjadi keluarga yang sakinah, mawaddah, warahmah.',
+      },
+    };
+  } else if (templateType === 'birthday') {
+    const designKey = birthdayDetails.design_key || (parsed.theme === 'elegant-gold' ? 'elegant-gold' : 'cute-balloon');
+    finalData = {
+      meta: {
+        title: `Undangan Ulang Tahun ${birthdayDetails.celebrant?.nickname || 'Celebrant'}`,
+        theme: parsed.theme || designKey,
+        template_type: 'birthday',
+        design_key: designKey,
+      },
+      content: {
+        ...birthdayDetails,
+        quote: parsed.quote || 'Selamat hari lahir! Semoga panjang umur, sehat selalu, dan dilimpahi kebahagiaan serta kesuksesan.',
       },
     };
   } else {

@@ -57,6 +57,28 @@ const GenerateRequestSchema = z.object({
             account_holder: z.string().optional().nullable(),
         }).optional().nullable(),
     }).optional(),
+    birthday_details: z.object({
+        design_key: z.enum(['cute-balloon', 'elegant-gold']).default('cute-balloon'),
+        celebrant: z.object({
+            name: z.string().min(2),
+            nickname: z.string().min(1),
+            age: z.string().min(1),
+            parent_name: z.string().optional().nullable(),
+            image_url: z.string().optional().nullable(),
+            gender: z.enum(['male', 'female']).optional().nullable(),
+        }),
+        event: z.object({
+            date: z.string(),
+            time: z.string(),
+            location: z.string().min(3),
+            maps_url: z.string().optional().nullable(),
+        }),
+        gift: z.object({
+            bank_name: z.string().optional().nullable(),
+            account_number: z.string().optional().nullable(),
+            account_holder: z.string().optional().nullable(),
+        }).optional().nullable(),
+    }).optional(),
 });
 
 /**
@@ -76,7 +98,7 @@ router.post('/generate', async (req, res, next) => {
     }
 
     try {
-        const { projectId, name, prompt, template_type, wedding_details } = validation.data;
+        const { projectId, name, prompt, template_type, wedding_details, birthday_details } = validation.data;
         const userId = req.user.id;
 
         // Check if template_type is active and registered in the database products table
@@ -102,7 +124,15 @@ router.post('/generate', async (req, res, next) => {
             });
         }
 
-        const pageData = await generateLandingPage(prompt, template_type, wedding_details);
+        // Custom validation check: if template_type is birthday, birthday_details is required
+        if (template_type === 'birthday' && !birthday_details) {
+            return res.status(400).json({
+                success: false,
+                error: { birthday_details: ['birthday_details is required when template_type is birthday'] },
+            });
+        }
+
+        const pageData = await generateLandingPage(prompt, template_type, wedding_details, birthday_details);
 
         let project;
         if (projectId) {

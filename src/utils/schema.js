@@ -95,6 +95,40 @@ const WeddingPageSchema = z.object({
 });
 
 /**
- * Master Zod union schema. Automatically detects store vs wedding based on template_type.
+ * Zod schema for the birthday template landing page JSON.
  */
-export const PageSchema = z.union([StorePageSchema, WeddingPageSchema]);
+const BirthdayPageSchema = z.object({
+    meta: z.object({
+        title: z.string().min(3).max(80).describe('Page browser tab title'),
+        theme: z.enum(['cute-balloon', 'elegant-gold']).describe('Birthday color theme name'),
+        template_type: z.literal('birthday'),
+        design_key: z.enum(['cute-balloon', 'elegant-gold']).default('cute-balloon'),
+    }),
+    content: z.object({
+        celebrant: z.object({
+            name: z.string().min(2).max(100),
+            nickname: z.string().min(1).max(50),
+            age: z.string().min(1).max(50).describe('e.g. "5th" or "17th" or "Sweet Seventeen"'),
+            parent_name: z.string().max(100).optional().nullable(),
+            image_url: z.string().optional().nullable(),
+            gender: z.enum(['male', 'female']).optional().nullable(),
+        }),
+        event: z.object({
+            date: z.string(),
+            time: z.string(),
+            location: z.string().min(3).max(200),
+            maps_url: z.string().optional().nullable(),
+        }),
+        gift: z.object({
+            bank_name: z.string().max(50).optional().nullable(),
+            account_number: z.string().max(50).optional().nullable(),
+            account_holder: z.string().max(100).optional().nullable(),
+        }).optional().nullable(),
+        quote: z.string().min(10).max(500).describe('Birthday wishes or quote'),
+    }),
+});
+
+/**
+ * Master Zod union schema. Automatically detects store vs wedding vs birthday based on template_type.
+ */
+export const PageSchema = z.union([StorePageSchema, WeddingPageSchema, BirthdayPageSchema]);
