@@ -12,6 +12,7 @@ const mockSupabaseService = {
     getProjectBySlug: jest.fn(),
     getProduct: jest.fn(),
     deployProject: jest.fn(),
+    updateDeployedProject: jest.fn(),
 };
 
 const mockCouponService = {
@@ -158,5 +159,69 @@ describe('ProjectService deployDraftProject Test Suite', () => {
             'refund',
             expect.stringContaining('Refund')
         );
+    });
+
+    describe('editDeployedProject', () => {
+        const mockDeployedProject = {
+            ...mockProjectData,
+            status: 'deployed',
+            edit_count: 0
+        };
+
+        beforeEach(() => {
+            mockSupabaseService.getProject.mockResolvedValue(mockDeployedProject);
+            mockSupabaseService.updateDeployedProject.mockResolvedValue({ success: true });
+        });
+
+        it('should successfully update a deployed project and increment edit count', async () => {
+            const updatedPageData = {
+                content: {
+                    groom: { nickname: 'Zubair' },
+                    bride: { nickname: 'Nadin' }
+                }
+            };
+            const result = await projectService.editDeployedProject(userId, projectId, updatedPageData);
+
+            expect(result.success).toBe(true);
+            expect(result.editCount).toBe(1);
+            expect(mockSupabaseService.updateDeployedProject).toHaveBeenCalledWith(
+                projectId,
+                userId,
+                expect.objectContaining({
+                    name: 'Undangan Zubair & Nadin',
+                    editCount: 1
+                })
+            );
+        });
+
+        it('should throw error if edit count limit (3) is exceeded', async () => {
+            const limitedProject = { ...mockDeployedProject, edit_count: 3 };
+            mockSupabaseService.getProject.mockResolvedValue(limitedProject);
+
+            await expect(
+                projectService.editDeployedProject(userId, projectId, {})
+            ).rejects.toThrow('Batas maksimal edit (3x) telah tercapai');
+        });
+
+        it('should throw error if template type is not wedding', async () => {
+            const storeProject = {
+                ...mockDeployedProject,
+                page_data: { meta: { template_type: 'store' } }
+            };
+            mockSupabaseService.getProject.mockResolvedValue(storeProject);
+
+            await expect(
+                projectService.editDeployedProject(userId, projectId, {})
+            ).rejects.toThrow('Hanya tipe undangan pernikahan yang diizinkan');
+        });
+
+        it('should throw error if status is not deployed', async () => {
+            const draftProject = { ...mockDeployedProject, status: 'draft' };
+            mockSupabaseService.getProject.mockResolvedValue(draftProject);
+
+            await expect(
+                projectService.editDeployedProject(userId, projectId, {})
+            ).rejects.toThrow('Hanya proyek yang sudah dipublikasikan');
+        });
     });
 });

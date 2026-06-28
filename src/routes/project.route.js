@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { supabaseService } from '../services/supabase.service.js';
 import { projectService } from '../services/project.service.js';
 import { z } from 'zod';
+import { PageSchema } from '../utils/schema.js';
 
 const router = Router();
 
@@ -100,6 +101,38 @@ router.get('/projects/:id', async (req, res, next) => {
         return res.json({ success: true, data: project });
     } catch (err) {
         return next(err);
+    }
+});
+
+const EditDeployedProjectSchema = z.object({
+    pageData: PageSchema,
+});
+
+/**
+ * POST /api/projects/:id/edit-deployed
+ * Updates a deployed wedding project (up to 3 times).
+ */
+router.post('/projects/:id/edit-deployed', async (req, res, next) => {
+    const { id } = req.params;
+    const validation = EditDeployedProjectSchema.safeParse(req.body);
+    if (!validation.success) {
+        return res.status(400).json({
+            success: false,
+            error: validation.error.flatten().fieldErrors,
+        });
+    }
+
+    try {
+        const { pageData } = validation.data;
+        const userId = req.user.id;
+        const result = await projectService.editDeployedProject(userId, id, pageData);
+
+        return res.status(200).json(result);
+    } catch (err) {
+        return res.status(400).json({
+            success: false,
+            error: err.message,
+        });
     }
 });
 

@@ -67,6 +67,31 @@ export const supabaseService = {
     },
 
     /**
+     * Updates an already deployed project (retains status = 'deployed' and increments edit_count).
+     * 
+     * @param {string} projectId - The ID of the project.
+     * @param {string} userId - The ID of the user.
+     * @param {Object} updateData - Object containing name, pageData, and editCount.
+     */
+    async updateDeployedProject(projectId, userId, updateData) {
+        const { data, error } = await supabase
+            .from('projects')
+            .update({
+                name: updateData.name,
+                page_data: updateData.pageData,
+                edit_count: updateData.editCount,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', projectId)
+            .eq('user_id', userId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        return data;
+    },
+
+    /**
      * Retrieves a project by ID.
      * 
      * @param {string} projectId - The ID of the project.
@@ -92,7 +117,7 @@ export const supabaseService = {
     async listProjects(userId) {
         const { data, error } = await supabase
             .from('projects')
-            .select('id, user_id, name, repo_url, live_url, status, created_at, updated_at')
+            .select('id, user_id, name, repo_url, live_url, status, created_at, updated_at, page_data, edit_count')
             .eq('user_id', userId)
             .order('created_at', { ascending: false });
 

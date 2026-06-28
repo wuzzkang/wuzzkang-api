@@ -205,4 +205,70 @@ export const projectService = {
             message: 'Aktivasi GitHub Pages sedang diulang.',
         };
     },
+
+    /**
+     * Updates an already deployed project (Specifically for wedding templates).
+     * Has a strict edit limit of 3 edits.
+     * 
+     * @param {string} userId - The ID of the user requesting edit.
+     * @param {string} projectId - The ID of the project to update.
+     * @param {Object} pageData - The new page content JSON data.
+     */
+    async editDeployedProject(userId, projectId, pageData) {
+        console.log(`[ProjectService] User ${userId} editing deployed project ${projectId}...`);
+
+        // 1. Fetch project
+        const project = await supabaseService.getProject(projectId);
+        if (!project) throw new Error('Proyek tidak ditemukan.');
+        if (project.user_id !== userId) throw new Error('Anda tidak memiliki akses ke proyek ini.');
+        
+        // 2. Validate status
+        if (project.status !== 'deployed') {
+            throw new Error('Hanya proyek yang sudah dipublikasikan yang dapat diedit di sini.');
+        }
+
+        // 3. Validate template type
+        let currentConfig = project.page_data;
+        if (typeof currentConfig === 'string') {
+            try {
+                currentConfig = JSON.parse(currentConfig);
+            } catch (e) {
+                console.error('[ProjectService] Failed to parse page_data JSON:', e);
+            }
+        }
+        const templateType = currentConfig?.meta?.template_type || 'store';
+        if (templateType !== 'wedding') {
+            throw new Error('Hanya tipe undangan pernikahan yang diizinkan untuk diedit pasca-publikasi.');
+        }
+
+        // 4. Check edit quota limit
+        const currentEdits = project.edit_count || 0;
+        if (currentEdits >= 3) {
+            throw new Error('Batas maksimal edit (3x) telah tercapai. Silakan hubungi admin untuk melakukan perubahan.');
+        }
+
+        // 5. Build dynamic names update based on wedding details name fields
+        const newEditCount = currentEdits + 1;
+        let newProjectName = project.name;
+        if (pageData?.content?.groom?.nickname && pageData?.content?.bride?.nickname) {
+            newProjectName = `Undangan ${pageData.content.groom.nickname} & ${pageData.content.bride.nickname}`;
+        }
+
+        // 6. Update database
+        const updatedProject = await supabaseService.updateDeployedProject(projectId, userId, {
+            name: newProjectName,
+            pageData: pageData,
+            editCount: newEditCount
+        });
+
+        console.log(`[ProjectService] Deployed project ${projectId} updated. New edit_count: ${newEditCount}`);
+
+        return {
+            success: true,
+            projectId,
+            editCount: newEditCount,
+            message: 'Perubahan berhasil disimpan.',
+            data: updatedProject
+        };
+    },
 };
