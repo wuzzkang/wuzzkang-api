@@ -237,8 +237,8 @@ export const projectService = {
             }
         }
         const templateType = currentConfig?.meta?.template_type || 'store';
-        if (templateType !== 'wedding') {
-            throw new Error('Hanya tipe undangan pernikahan yang diizinkan untuk diedit pasca-publikasi.');
+        if (templateType !== 'wedding' && templateType !== 'birthday') {
+            throw new Error('Hanya tipe undangan pernikahan dan ulang tahun yang diizinkan untuk diedit pasca-publikasi.');
         }
 
         // 4. Check edit quota limit
@@ -247,11 +247,13 @@ export const projectService = {
             throw new Error('Batas maksimal edit (3x) telah tercapai. Silakan hubungi admin untuk melakukan perubahan.');
         }
 
-        // 5. Build dynamic names update based on wedding details name fields
+        // 5. Build dynamic names update based on wedding/birthday details name fields
         const newEditCount = currentEdits + 1;
         let newProjectName = project.name;
-        if (pageData?.content?.groom?.nickname && pageData?.content?.bride?.nickname) {
+        if (templateType === 'wedding' && pageData?.content?.groom?.nickname && pageData?.content?.bride?.nickname) {
             newProjectName = `Undangan ${pageData.content.groom.nickname} & ${pageData.content.bride.nickname}`;
+        } else if (templateType === 'birthday' && pageData?.content?.celebrant?.nickname) {
+            newProjectName = `Undangan Ulang Tahun ${pageData.content.celebrant.nickname}`;
         }
 
         // 6. Update database
