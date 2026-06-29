@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { generateLandingPage } from '../services/ai.service.js';
+import { generateLandingPage, generateFieldContent } from '../services/ai.service.js';
 import { supabaseService } from '../services/supabase.service.js';
 import { z } from 'zod';
 
@@ -79,14 +79,35 @@ const GenerateRequestSchema = z.object({
             account_holder: z.string().optional().nullable(),
         }).optional().nullable(),
     }).optional(),
+    toko_online_details: z.object({
+        design_key: z.enum(['modern-clean', 'midnight-dark']).default('modern-clean'),
+        store: z.object({
+            name: z.string().min(2),
+            tagline: z.string().min(2),
+            description: z.string().optional().nullable(),
+            logo_url: z.string().optional().nullable(),
+            banner_url: z.string().optional().nullable(),
+        }),
+        products: z.array(z.object({
+            name: z.string().min(2),
+            price: z.string().min(1),
+            description: z.string().optional().nullable(),
+            image_url: z.string().optional().nullable(),
+        })).min(1).max(6),
+        contact: z.object({
+            whatsapp: z.string().min(5),
+            instagram: z.string().optional().nullable(),
+            shopee_url: z.string().optional().nullable(),
+            tokopedia_url: z.string().optional().nullable(),
+            address: z.string().optional().nullable(),
+        }),
+        quote: z.string().optional().nullable(),
+    }).optional(),
 });
 
 /**
  * POST /api/generate
  * Generates a complete landing page JSON from a user-provided prompt.
- *
- * @body {{ prompt: string }} - The niche or description for the landing page.
- * @returns {{ success: true, data: PageSchema }} The validated landing page data.
  */
 router.post('/generate', async (req, res, next) => {
     const validation = GenerateRequestSchema.safeParse(req.body);
@@ -98,7 +119,7 @@ router.post('/generate', async (req, res, next) => {
     }
 
     try {
-        const { projectId, name, prompt, template_type, wedding_details, birthday_details } = validation.data;
+        const { projectId, name, prompt, template_type, wedding_details, birthday_details, toko_online_details } = validation.data;
         const userId = req.user.id;
 
         // Check if template_type is active and registered in the database products table
@@ -116,7 +137,7 @@ router.post('/generate', async (req, res, next) => {
             });
         }
 
-        // Custom validation check: if template_type is wedding, wedding_details is required
+        // Custom validation checks
         if (template_type === 'wedding' && !wedding_details) {
             return res.status(400).json({
                 success: false,
@@ -124,7 +145,6 @@ router.post('/generate', async (req, res, next) => {
             });
         }
 
-        // Custom validation check: if template_type is birthday, birthday_details is required
         if (template_type === 'birthday' && !birthday_details) {
             return res.status(400).json({
                 success: false,
@@ -132,7 +152,14 @@ router.post('/generate', async (req, res, next) => {
             });
         }
 
-        const pageData = await generateLandingPage(prompt, template_type, wedding_details, birthday_details);
+        if (template_type === 'toko-online' && !toko_online_details) {
+            return res.status(400).json({
+                success: false,
+                error: { toko_online_details: ['toko_online_details is required when template_type is toko-online'] },
+            });
+        }
+
+        const pageData = await generateLandingPage(prompt, template_type, wedding_details, birthday_details, toko_online_details);
 
         let project;
         if (projectId) {
@@ -157,7 +184,41 @@ router.post('/generate', async (req, res, next) => {
             }
         });
     } catch (err) {
-        // Forward to centralized error middleware
+        return next(err);
+    }
+});
+
+const GenerateFieldRequestSchema = z.object({
+    fieldType: z.enum(['store_description', 'product_description', 'store_quote']),
+    context: z.object({
+        storeName: z.string().optional(),
+        storeTagline: z.string().optional(),
+        productName: z.string().optional(),
+        productPrice: z.string().optional(),
+    }),
+});
+
+/**
+ * POST /api/generate/field
+ * Generates copy content for a specific input field in a structured form.
+ */
+router.post('/generate/field', async (req, res, next) => {
+    const validation = GenerateFieldRequestSchema.safeParse(req.body);
+    if (!validation.success) {
+        return res.status(400).json({
+            success: false,
+            error: validation.error.flatten().fieldErrors,
+        });
+    }
+
+    try {
+        const { fieldType, context } = validation.data;
+        const content = await generateFieldContent(fieldType, context);
+        return res.status(200).json({
+            success: true,
+            data: { content },
+        });
+    } catch (err) {
         return next(err);
     }
 });

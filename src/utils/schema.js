@@ -129,6 +129,41 @@ const BirthdayPageSchema = z.object({
 });
 
 /**
+ * Zod schema for the toko-online template landing page JSON.
+ */
+const TokoOnlinePageSchema = z.object({
+    meta: z.object({
+        title: z.string().min(3).max(80).describe('Page browser tab title'),
+        theme: z.enum(['modern-clean', 'midnight-dark']).describe('Toko Online color theme name'),
+        template_type: z.literal('toko-online'),
+        design_key: z.enum(['modern-clean', 'midnight-dark']).default('modern-clean'),
+    }),
+    content: z.object({
+        store: z.object({
+            name: z.string().min(2).max(100),
+            tagline: z.string().min(2).max(150),
+            description: z.string().min(5).max(1000).optional().nullable(),
+            logo_url: z.string().optional().nullable(),
+            banner_url: z.string().optional().nullable(),
+        }),
+        products: z.array(z.object({
+            name: z.string().min(2).max(100),
+            price: z.string().min(1).max(50),
+            description: z.string().max(500).optional().nullable(),
+            image_url: z.string().optional().nullable(),
+        })).min(1).max(6),
+        contact: z.object({
+            whatsapp: z.string().min(5).max(50),
+            instagram: z.string().max(50).optional().nullable(),
+            shopee_url: z.string().optional().nullable(),
+            tokopedia_url: z.string().optional().nullable(),
+            address: z.string().max(200).optional().nullable(),
+        }),
+        quote: z.string().max(500).optional().nullable(),
+    }),
+});
+
+/**
  * Master Zod union schema. Automatically detects store vs wedding vs birthday based on template_type.
  */
-export const PageSchema = z.union([StorePageSchema, WeddingPageSchema, BirthdayPageSchema]);
+export const PageSchema = z.union([StorePageSchema, WeddingPageSchema, BirthdayPageSchema, TokoOnlinePageSchema]);

@@ -99,15 +99,47 @@ Rules:
  * The response is validated against the PageSchema before being returned.
  *
  * @param {string} prompt - The user-provided description or niche for the landing page.
- * @param {string} [templateType='store'] - The type of template: 'store', 'wedding', or 'birthday'.
+ * @param {string} [templateType='store'] - The type of template: 'store', 'wedding', 'birthday', or 'toko-online'.
  * @param {object} [weddingDetails=null] - Pre-structured wedding info to merge with AI output.
  * @param {object} [birthdayDetails=null] - Pre-structured birthday info to merge with AI output.
+ * @param {object} [tokoOnlineDetails=null] - Pre-structured toko-online info.
  * @returns {Promise<import('../utils/schema.js').PageSchema>} Validated landing page data.
  * @throws {Error} If the API call fails, JSON parsing fails, or schema validation fails.
  */
-export async function generateLandingPage(prompt, templateType = 'store', weddingDetails = null, birthdayDetails = null) {
+export async function generateLandingPage(prompt, templateType = 'store', weddingDetails = null, birthdayDetails = null, tokoOnlineDetails = null) {
   const client = getAIClient();
   let rawContent;
+
+  if (templateType === 'toko-online') {
+    if (!tokoOnlineDetails) {
+      throw new Error('tokoOnlineDetails is required for toko-online template type.');
+    }
+
+    const designKey = tokoOnlineDetails.design_key || 'modern-clean';
+    const theme = tokoOnlineDetails.theme || designKey;
+    const finalData = {
+      meta: {
+        title: tokoOnlineDetails.store?.name ? `Toko ${tokoOnlineDetails.store.name}` : 'Toko Online',
+        theme: theme,
+        template_type: 'toko-online',
+        design_key: designKey,
+      },
+      content: {
+        ...tokoOnlineDetails,
+        quote: tokoOnlineDetails.quote || 'Selamat datang di toko online kami. Selamat berbelanja!',
+      },
+    };
+
+    const validation = PageSchema.safeParse(finalData);
+    if (!validation.success) {
+      const issues = validation.error.flatten();
+      console.error('[ai.service] PageSchema validation failed (no-prompt-toko-online):', JSON.stringify(issues, null, 2));
+      throw new Error(
+        `AI output failed schema validation: ${JSON.stringify(issues.fieldErrors)}`
+      );
+    }
+    return validation.data;
+  }
 
   if (templateType === 'wedding') {
     if (!weddingDetails) {
@@ -269,10 +301,62 @@ export async function generateLandingPage(prompt, templateType = 'store', weddin
   return validation.data;
 }
 
+const FIELD_ASSIST_SYSTEM_PROMPT = `You are a creative copywriter for Indonesian online stores.
+Your task is to generate short, engaging, and professional copy for the specified field.
+Output ONLY the generated copy string directly. Do not include quotes around the output, markdown formatting, or extra explanations. Always respond in Indonesian language.`;
+
+/**
+ * Generates engaging copy for a specific input field in structured toko-online forms.
+ *
+ * @param {string} fieldType - The field type: 'store_description', 'product_description', or 'store_quote'.
+ * @param {object} context - Context variables required for generating the text.
+ * @returns {Promise<string>} Generated text content.
+ */
+export async function generateFieldContent(fieldType, context) {
+  const client = getAIClient();
+  let userPrompt = '';
+
+  if (fieldType === 'store_description') {
+    userPrompt = `Buatkan deskripsi toko online yang menarik dan profesional dalam bahasa Indonesia (maksimal 200 karakter) berdasarkan informasi berikut:
+Nama Toko: ${context.storeName}
+Tagline Toko: ${context.storeTagline}`;
+  } else if (fieldType === 'product_description') {
+    userPrompt = `Buatkan deskripsi produk yang menarik dan informatif untuk dipajang di toko online (maksimal 150 karakter) berdasarkan informasi berikut:
+Nama Produk: ${context.productName}
+Harga Produk: Rp ${context.productPrice}`;
+  } else if (fieldType === 'store_quote') {
+    userPrompt = `Buatkan slogan sambutan atau quote pembuka toko online yang hangat dan persuasif (maksimal 150 karakter) berdasarkan informasi berikut:
+Nama Toko: ${context.storeName}
+Tagline: ${context.storeTagline}`;
+  } else {
+    throw new Error(`Unsupported fieldType: ${fieldType}`);
+  }
+
+  try {
+    const completion = await client.chat.completions.create({
+      model: config.AI_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'meta-llama/llama-4-maverick:free',
+      messages: [
+        { role: 'system', content: FIELD_ASSIST_SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt },
+      ],
+    });
+
+    let content = completion.choices[0]?.message?.content;
+    if (content) {
+      content = content.trim().replace(/^["']|["']$/g, ''); // strip wrapping quotes if any
+    }
+    return content || '';
+  } catch (err) {
+    console.error('[ai.service] Field assist AI call failed:', err.message);
+    throw new Error(`AI Field generation failed: ${err.message}`);
+  }
+}
+
 /**
  * Named service object export for consistency with other services (e.g., walletService, supabaseService).
  * Allows `import { aiService } from './ai.service.js'` and `aiService.generateLandingPage(...)`.
  */
 export const aiService = {
   generateLandingPage,
+  generateFieldContent,
 };
