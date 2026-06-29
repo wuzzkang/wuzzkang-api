@@ -87,9 +87,12 @@ router.post('/generate-image', async (req, res, next) => {
             const uploadResult = await supabaseService.uploadWeddingAsset(fileName, buffer, 'image/png');
             imageUrl = uploadResult.publicUrl;
         } catch (openaiErr) {
-            console.warn('[ImageRoute] OpenAI DALL-E execution failed. Falling back to mock avatar for testing:', openaiErr.message);
-            // Fallback to a mock public placeholder avatar URL as requested by the user
-            imageUrl = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=250';
+            // Re-throw so the outer handler returns an error response.
+            // The dashboard already has correct gendered default avatars (DEFAULT_GROOM_AVATAR /
+            // DEFAULT_BRIDE_AVATAR) in its own catch block, so returning success:false here
+            // is the correct approach — it lets the client pick the right default per target.
+            console.warn('[ImageRoute] OpenAI DALL-E execution failed:', openaiErr.message);
+            throw new Error(openaiErr.message || 'Gagal men-generate gambar via AI.');
         }
 
         // Deduct balance or increment Redis counter AFTER successful execution (or mock)
