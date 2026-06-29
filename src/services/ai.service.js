@@ -106,9 +106,39 @@ Rules:
  * @returns {Promise<import('../utils/schema.js').PageSchema>} Validated landing page data.
  * @throws {Error} If the API call fails, JSON parsing fails, or schema validation fails.
  */
-export async function generateLandingPage(prompt, templateType = 'store', weddingDetails = null, birthdayDetails = null, tokoOnlineDetails = null) {
+export async function generateLandingPage(prompt, templateType = 'store', weddingDetails = null, birthdayDetails = null, tokoOnlineDetails = null, campaignDetails = null) {
   const client = getAIClient();
   let rawContent;
+
+  if (templateType === 'campaign') {
+    if (!campaignDetails) {
+      throw new Error('campaignDetails is required for campaign template type.');
+    }
+
+    const designKey = campaignDetails.design_key || 'neon-conversion';
+    const theme = campaignDetails.theme || designKey;
+    const finalData = {
+      meta: {
+        title: campaignDetails.hero?.headline ? `Campaign: ${campaignDetails.hero.headline.substring(0, 50)}` : 'Campaign',
+        theme: theme,
+        template_type: 'campaign',
+        design_key: designKey,
+      },
+      content: {
+        ...campaignDetails,
+      },
+    };
+
+    const validation = PageSchema.safeParse(finalData);
+    if (!validation.success) {
+      const issues = validation.error.flatten();
+      console.error('[ai.service] PageSchema validation failed (no-prompt-campaign):', JSON.stringify(issues, null, 2));
+      throw new Error(
+        `AI output failed schema validation: ${JSON.stringify(issues.fieldErrors)}`
+      );
+    }
+    return validation.data;
+  }
 
   if (templateType === 'toko-online') {
     if (!tokoOnlineDetails) {

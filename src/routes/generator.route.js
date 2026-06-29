@@ -103,6 +103,41 @@ const GenerateRequestSchema = z.object({
         }),
         quote: z.string().optional().nullable(),
     }).optional(),
+    campaign_details: z.object({
+        design_key: z.enum(['neon-conversion', 'clean-trust']).default('neon-conversion'),
+        hero: z.object({
+            headline: z.string().min(5),
+            subheadline: z.string().min(10),
+            cta_text: z.string().min(2),
+        }),
+        problems: z.object({
+            title: z.string().min(3),
+            list: z.array(z.string().min(5)).min(1).max(8),
+        }),
+        solutions: z.object({
+            title: z.string().min(3),
+            intro: z.string().min(5),
+            benefits: z.array(z.object({
+                title: z.string().min(3),
+                desc: z.string().min(5),
+            })).min(1).max(6),
+        }),
+        social_proof: z.object({
+            testimonials: z.array(z.object({
+                name: z.string().min(2),
+                role: z.string().optional().nullable(),
+                content: z.string().min(5),
+            })).min(1).max(4),
+            guarantee: z.string().optional().nullable(),
+        }),
+        closing: z.object({
+            urgency: z.string().min(5),
+            cta_text: z.string().min(2),
+        }),
+        contact: z.object({
+            whatsapp: z.string().min(5),
+        }),
+    }).optional(),
 });
 
 /**
@@ -119,7 +154,7 @@ router.post('/generate', async (req, res, next) => {
     }
 
     try {
-        const { projectId, name, prompt, template_type, wedding_details, birthday_details, toko_online_details } = validation.data;
+        const { projectId, name, prompt, template_type, wedding_details, birthday_details, toko_online_details, campaign_details } = validation.data;
         const userId = req.user.id;
 
         // Check if template_type is active and registered in the database products table
@@ -159,7 +194,14 @@ router.post('/generate', async (req, res, next) => {
             });
         }
 
-        const pageData = await generateLandingPage(prompt, template_type, wedding_details, birthday_details, toko_online_details);
+        if (template_type === 'campaign' && !campaign_details) {
+            return res.status(400).json({
+                success: false,
+                error: { campaign_details: ['campaign_details is required when template_type is campaign'] },
+            });
+        }
+
+        const pageData = await generateLandingPage(prompt, template_type, wedding_details, birthday_details, toko_online_details, campaign_details);
 
         let project;
         if (projectId) {

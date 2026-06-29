@@ -164,6 +164,52 @@ const TokoOnlinePageSchema = z.object({
 });
 
 /**
+ * Zod schema for the campaign template landing page JSON.
+ */
+const CampaignPageSchema = z.object({
+    meta: z.object({
+        title: z.string().min(3).max(80).describe('Page browser tab title'),
+        theme: z.enum(['neon-conversion', 'clean-trust']).describe('Campaign color theme name'),
+        template_type: z.literal('campaign'),
+        design_key: z.enum(['neon-conversion', 'clean-trust']).default('neon-conversion'),
+    }),
+    content: z.object({
+        hero: z.object({
+            headline: z.string().min(5).max(150),
+            subheadline: z.string().min(10).max(300),
+            cta_text: z.string().min(2).max(50),
+        }),
+        problems: z.object({
+            title: z.string().min(3).max(100),
+            list: z.array(z.string().min(5).max(200)).min(1).max(8),
+        }),
+        solutions: z.object({
+            title: z.string().min(3).max(100),
+            intro: z.string().min(5).max(300),
+            benefits: z.array(z.object({
+                title: z.string().min(3).max(100),
+                desc: z.string().min(5).max(300),
+            })).min(1).max(6),
+        }),
+        social_proof: z.object({
+            testimonials: z.array(z.object({
+                name: z.string().min(2).max(100),
+                role: z.string().max(100).optional().nullable(),
+                content: z.string().min(5).max(500),
+            })).min(1).max(4),
+            guarantee: z.string().max(500).optional().nullable(),
+        }),
+        closing: z.object({
+            urgency: z.string().min(5).max(500),
+            cta_text: z.string().min(2).max(50),
+        }),
+        contact: z.object({
+            whatsapp: z.string().min(5).max(50),
+        }),
+    }),
+});
+
+/**
  * Master Zod union schema. Automatically detects store vs wedding vs birthday based on template_type.
  */
-export const PageSchema = z.union([StorePageSchema, WeddingPageSchema, BirthdayPageSchema, TokoOnlinePageSchema]);
+export const PageSchema = z.union([StorePageSchema, WeddingPageSchema, BirthdayPageSchema, TokoOnlinePageSchema, CampaignPageSchema]);
