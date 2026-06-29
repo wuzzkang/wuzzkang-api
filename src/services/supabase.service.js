@@ -210,7 +210,7 @@ export const supabaseService = {
     async getProfile(userId) {
         const { data, error } = await supabase
             .from('profiles')
-            .select('id, balance, email, full_name, avatar_url, updated_at')
+            .select('id, balance, email, full_name, avatar_url, daily_ai_limit, ai_generate_cost, updated_at')
             .eq('id', userId)
             .single();
 
@@ -286,6 +286,28 @@ export const supabaseService = {
             path: data.path,
             publicUrl: publicUrlData.publicUrl
         };
+    },
+
+    /**
+     * Fetches all system settings.
+     * 
+     * @returns {Promise<Object>} An object of key-value pairs.
+     */
+    async getSystemSettings() {
+        const { data, error } = await supabase
+            .from('system_settings')
+            .select('key, value');
+
+        if (error) {
+            console.error('[SupabaseService] Error fetching system settings:', error.message);
+            return {};
+        }
+
+        const settings = {};
+        for (const item of data || []) {
+            settings[item.key] = item.value;
+        }
+        return settings;
     },
 
     /**

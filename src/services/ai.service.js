@@ -345,6 +345,7 @@ Output ONLY the generated copy string directly. Do not include quotes around the
 export async function generateFieldContent(fieldType, context) {
   const client = getAIClient();
   let userPrompt = '';
+  const isJson = fieldType.startsWith('campaign_');
 
   if (fieldType === 'store_description') {
     userPrompt = `Buatkan deskripsi toko online yang menarik dan profesional dalam bahasa Indonesia (maksimal 200 karakter) berdasarkan informasi berikut:
@@ -358,22 +359,101 @@ Harga Produk: Rp ${context.productPrice}`;
     userPrompt = `Buatkan slogan sambutan atau quote pembuka toko online yang hangat dan persuasif (maksimal 150 karakter) berdasarkan informasi berikut:
 Nama Toko: ${context.storeName}
 Tagline: ${context.storeTagline}`;
+  } else if (fieldType === 'campaign_hero') {
+    userPrompt = `Buatkan Headline (menghentak/solutif), Subheadline (menjelaskan detail/benefits), dan CTA Text (teks tombol aksi yang persuasif) untuk landing page campaign.
+Informasi Campaign:
+Nama Campaign: ${context.campaignName}
+Brief Deskripsi: ${context.campaignBrief}
+
+Kembalikan data dalam format JSON murni:
+{
+  "headline": "Tulis Headline...",
+  "subheadline": "Tulis Subheadline...",
+  "cta_text": "Teks Tombol..."
+}`;
+  } else if (fieldType === 'campaign_problems') {
+    userPrompt = `Buatkan 3 poin masalah (customer pain points) yang relevan dan dramatis yang sering dihadapi calon pembeli berdasarkan informasi berikut:
+Nama Campaign: ${context.campaignName}
+Brief Deskripsi: ${context.campaignBrief}
+
+Kembalikan data dalam format JSON murni:
+{
+  "title": "Judul Bagian Masalah (e.g. Hambatan Utama Anda)",
+  "list": [
+    "Poin masalah 1",
+    "Poin masalah 2",
+    "Poin masalah 3"
+  ]
+}`;
+  } else if (fieldType === 'campaign_benefits') {
+    userPrompt = `Buatkan 3 poin manfaat/solusi utama (benefits) yang berfokus pada hasil (benefit-driven) berdasarkan informasi berikut:
+Nama Campaign: ${context.campaignName}
+Brief Deskripsi: ${context.campaignBrief}
+
+Kembalikan data dalam format JSON murni:
+{
+  "title": "Judul Bagian Solusi",
+  "intro": "Kalimat pengantar singkat mengenai solusi...",
+  "benefits": [
+    { "title": "Nama Manfaat 1", "desc": "Penjelasan detail manfaat 1..." },
+    { "title": "Nama Manfaat 2", "desc": "Penjelasan detail manfaat 2..." },
+    { "title": "Nama Manfaat 3", "desc": "Penjelasan detail manfaat 3..." }
+  ]
+}`;
+  } else if (fieldType === 'campaign_testimonials') {
+    userPrompt = `Buatkan 2 contoh testimoni pelanggan yang natural, spesifik, dan membangkitkan rasa percaya (social proof) berdasarkan informasi berikut:
+Nama Campaign: ${context.campaignName}
+Brief Deskripsi: ${context.campaignBrief}
+
+Kembalikan data dalam format JSON murni:
+{
+  "testimonials": [
+    { "name": "Nama Pelanggan 1", "role": "Pekerjaan/Status", "content": "Kalimat testimoni detail..." },
+    { "name": "Nama Pelanggan 2", "role": "Pekerjaan/Status", "content": "Kalimat testimoni detail..." }
+  ]
+}`;
+  } else if (fieldType === 'campaign_urgency') {
+    userPrompt = `Buatkan teks urgensi penutup (scarcity copy) yang mendesak calon pembeli agar segera mengambil tindakan (e.g. diskon waktu terbatas, sisa kuota) beserta teks tombol CTA penutup berdasarkan informasi berikut:
+Nama Campaign: ${context.campaignName}
+Brief Deskripsi: ${context.campaignBrief}
+
+Kembalikan data dalam format JSON murni:
+{
+  "urgency": "Teks kalimat urgensi penutup...",
+  "cta_text": "Teks tombol CTA penutup..."
+}`;
   } else {
     throw new Error(`Unsupported fieldType: ${fieldType}`);
   }
+
+  const systemPrompt = isJson
+    ? `You are a professional conversion-oriented Indonesian copywriter. Output ONLY valid JSON matching the requested structure. Do not wrap in markdown code blocks or add any explanations. Return only the JSON object.`
+    : FIELD_ASSIST_SYSTEM_PROMPT;
 
   try {
     const completion = await client.chat.completions.create({
       model: config.AI_PROVIDER === 'groq' ? 'llama-3.3-70b-versatile' : 'meta-llama/llama-4-maverick:free',
       messages: [
-        { role: 'system', content: FIELD_ASSIST_SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
     });
 
     let content = completion.choices[0]?.message?.content;
     if (content) {
-      content = content.trim().replace(/^["']|["']$/g, ''); // strip wrapping quotes if any
+      content = content.trim();
+      if (isJson) {
+        // Strip markdown backticks if wrapped
+        content = content.replace(/^```json\s*/i, '').replace(/```$/, '').trim();
+        try {
+          return JSON.parse(content);
+        } catch (parseErr) {
+          console.error('[ai.service] JSON parse failed for AI response:', content);
+          throw new Error('AI output was not valid JSON');
+        }
+      } else {
+        content = content.replace(/^["']|["']$/g, ''); // strip wrapping quotes if any
+      }
     }
     return content || '';
   } catch (err) {

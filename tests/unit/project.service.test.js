@@ -212,7 +212,7 @@ describe('ProjectService deployDraftProject Test Suite', () => {
 
             await expect(
                 projectService.editDeployedProject(userId, projectId, {})
-            ).rejects.toThrow('Hanya tipe undangan pernikahan dan ulang tahun yang diizinkan');
+            ).rejects.toThrow('Hanya tipe undangan pernikahan, ulang tahun, toko online, dan campaign yang diizinkan');
         });
 
         it('should throw error if status is not deployed', async () => {
